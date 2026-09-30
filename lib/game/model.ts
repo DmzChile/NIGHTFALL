@@ -1,4 +1,5 @@
 import { starterRecipes, discoverItems, ensureProgression, recipeUnlocked } from './progression';
+import { terrainHeight, migrateTerrain, TERRAIN_VERSION } from './terrain';
 import { validateWorldState } from './validation';
 import { ITEMS, MONSTERS, NODES, day, tierCap, type Recipe } from './data';
 export type Stack = {
@@ -90,6 +91,7 @@ export type State = {
     formatVersion: 1;
     contentVersion: 1;
     generatorVersion: 1;
+    terrainVersion?: 1 | 2;
     id: string;
     name: string;
     seed: string;
@@ -177,7 +179,7 @@ export const distance = (a: {
     z: number;
 }) => Math.hypot(a.x - b.x, a.z - b.z);
 export function height(x: number, z: number) {
-    return .7 * Math.sin(x * .025) * Math.cos(z * .018) + .3 * Math.sin(z * .052 + x * .023) + Math.max(0, Math.hypot(x, z) - 80) * .012;
+    return terrainHeight(x, z);
 }
 export function biome(x: number, z: number) {
     if (z > 240)
@@ -255,7 +257,7 @@ export function addItem(s: State, id: string, qty: number) {
     return ok;
 }
 export function createWorld(name: string, seed: string, difficulty: State['difficulty'] = 'normal', mode: State['mode'] = 'normal'): State {
-    const s: State = { formatVersion: 1, contentVersion: 1, generatorVersion: 1, id: uuid(), name: name.slice(0, 40) || '새로운 섬', seed: seed.slice(0, 64) || uuid().slice(0, 8), difficulty, mode, status: 'alive', time: 0, tick: 0, rng: 1, created: Date.now(), generation: 0, player: { x: 0, z: 8, y: 0, vy: 0, yaw: 0, pitch: 0, hp: 100, hunger: 100, stamina: 100, items: [], hotbar: Array(8).fill(null), selected: 0, armor: null, hitAt: -10, actionAt: -10, potionAt: -20, foodAt: -3, dodgeUntil: 0, poison: 0, curse: 0, slow: 0, healLeft: 0, healRate: 0, bed: null }, nodes: [], buildings: [], enemies: [], projectiles: [], drops: [], previousKills: 0, kills: {}, nightPlan: [], nightWave: 0, blood: false, lastBlood: 0, quests: [], discovered: ['초원'], knownItems: [], unlockedRecipes: starterRecipes(), regionNext: {} };
+    const s: State = { formatVersion: 1, contentVersion: 1, generatorVersion: 1, terrainVersion: TERRAIN_VERSION, id: uuid(), name: name.slice(0, 40) || '새로운 섬', seed: seed.slice(0, 64) || uuid().slice(0, 8), difficulty, mode, status: 'alive', time: 0, tick: 0, rng: 1, created: Date.now(), generation: 0, player: { x: 0, z: 8, y: 0, vy: 0, yaw: 0, pitch: 0, hp: 100, hunger: 100, stamina: 100, items: [], hotbar: Array(8).fill(null), selected: 0, armor: null, hitAt: -10, actionAt: -10, potionAt: -20, foodAt: -3, dodgeUntil: 0, poison: 0, curse: 0, slow: 0, healLeft: 0, healRate: 0, bed: null }, nodes: [], buildings: [], enemies: [], projectiles: [], drops: [], previousKills: 0, kills: {}, nightPlan: [], nightWave: 0, blood: false, lastBlood: 0, quests: [], discovered: ['초원'], knownItems: [], unlockedRecipes: starterRecipes(), regionNext: {} };
     s.rng = hash(s.seed);
     const gen = { rng: hash(s.seed + 'world') };
     const node = (kind: string, x: number, z: number) => s.nodes.push({ id: `node-${s.nodes.length}`, kind, x, z, hp: NODES[kind].hp, depleted: false, readyAt: 0 });
@@ -421,6 +423,7 @@ export function transactTransfer(from: Stack[], to: Stack[], uid: string, cap: n
 }
 export function validateState(v: unknown): State {
     const s = validateWorldState(v);
+    migrateTerrain(s);
     ensureProgression(s);
     normalizeSlots(s);
     return s;

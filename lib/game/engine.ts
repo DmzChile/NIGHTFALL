@@ -1,4 +1,5 @@
 import type { VisualEvent } from './visual-events';
+import { migrateTerrain, terrainSlope } from './terrain';
 import { discoverItems, ensureProgression } from './progression';
 import { REGION_ENEMIES, regionWarning } from './regions';
 import { segmentSphere } from './collision';
@@ -54,6 +55,7 @@ export class Engine {
     private lastStamina = 0;
     private attackPressed = false;
     constructor(s: State, storage: SaveManager) {
+        migrateTerrain(s);
         ensureProgression(s);
         this.state = s;
         this.lastStamina = s.player.staminaAt ?? 0;
@@ -329,8 +331,10 @@ export class Engine {
             this.notify('다른 물체와 겹쳐 배치할 수 없습니다.');
             return;
         }
-        if (Math.abs(height(x + 1, z) - height(x, z)) > .4)
+        if (terrainSlope(x, z) > .4) {
+            this.notify('경사가 완만한 지면에 배치하세요.');
             return;
+        }
         const b: Building = { id: uuid(), kind: it.id, x, z, yaw: p.yaw, hp: it.id === 'wall' ? 250 : 200, items: [], jobs: [], fuel: 0 };
         s.buildings.push(b);
         this.visual({ type: 'action', action: 'place', item: it.id });
@@ -898,8 +902,9 @@ export class Engine {
                 e.timer -= dt;
                 if (e.timer <= 0) {
                     if (d.role !== 'melee' && dist < 25) {
-                        const dx = p.x - e.x, dz = p.z - e.z, l = Math.hypot(dx, dz) || 1;
-                        s.projectiles.push({ id: uuid(), x: e.x, y: height(e.x, e.z) + 1.3, z: e.z, vx: dx / l * 10, vy: 0, vz: dz / l * 10, life: 5, damage: d.damage * (1 + .1 * (e.tier - d.min)), enemy: true, type: e.kind });
+                        const y = height(e.x, e.z) + 1.3;
+                        const dx = p.x - e.x, dy = height(p.x, p.z) + p.y + 1 - y, dz = p.z - e.z, l = Math.hypot(dx, dy, dz) || 1;
+                        s.projectiles.push({ id: uuid(), x: e.x, y, z: e.z, vx: dx / l * 10, vy: dy / l * 10, vz: dz / l * 10, life: 5, damage: d.damage * (1 + .1 * (e.tier - d.min)), enemy: true, type: e.kind });
                     }
                     else if (dist < 2.8) {
                         this.hurt(d.damage * (1 + .1 * (e.tier - d.min)) * (s.difficulty === 'easy' ? .8 : s.difficulty === 'hard' ? 1.2 : 1), true, e);

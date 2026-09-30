@@ -2,7 +2,7 @@ import { creaturePose, handPose, MotionSample, damp, type HandAction } from './a
 import { createCreatureRig, poseCreature, type CreatureRig } from './rig';
 import { EffectPool } from './effects';
 import type { VisualEvent } from './visual-events';
-import { GrassField, TERRAIN_SIZE, TERRAIN_SEGMENTS } from './grass';
+import { terrainVertexHeight, terrainColor, TERRAIN_SIZE, TERRAIN_SEGMENTS } from './terrain';
 import { createViewModel, viewModelTransform } from './viewmodel';
 import * as THREE from 'three';
 import { Engine } from './engine';
@@ -20,7 +20,6 @@ export class GameScene {
     held = new THREE.Group();
     guard = new THREE.Group();
     effects = new EffectPool();
-    grass = new GrassField();
     rigs = new WeakMap<THREE.Group, CreatureRig>();
     ghosts: {
         rig: CreatureRig;
@@ -64,10 +63,10 @@ export class GameScene {
         g.rotateX(-Math.PI / 2);
         const p = g.attributes.position, colors = [];
         for (let i = 0; i < p.count; i++) {
-            const x = p.getX(i), z = p.getZ(i), r = Math.hypot(x, z);
-            p.setY(i, r > 480 ? -2 : height(x, z));
-            const color = new THREE.Color(r > 450 ? 0xaaa589 : biome(x, z) === '화산' ? 0x655b52 : biome(x, z) === '바위 언덕' ? 0x808577 : biome(x, z) === '습지' ? 0x4a6860 : biome(x, z) === '숲' ? 0x648362 : 0x82926a);
-            color.multiplyScalar(.9 + .1 * Math.sin(x + z));
+            const x = p.getX(i), z = p.getZ(i);
+            p.setY(i, terrainVertexHeight(x, z));
+            const color = new THREE.Color(terrainColor(x, z, biome(x, z)));
+            color.multiplyScalar(.94 + .05 * Math.sin(x * .4 + z * .35));
             colors.push(color.r, color.g, color.b);
         }
         g.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
@@ -82,7 +81,7 @@ export class GameScene {
         this.moonOrb = new THREE.Mesh(new THREE.SphereGeometry(4, 12, 8), new THREE.MeshBasicMaterial({ color: 0xb7d4e0 }));
         this.scene.add(this.sunOrb, this.moonOrb);
         this.camera.add(this.held, this.guard);
-        this.scene.add(this.effects.mesh, this.grass.mesh);
+        this.scene.add(this.effects.mesh);
         this.mesh(this.guard, 'box', 0x806347, 0, 0, 0, .55, .65, .1);
         this.mesh(this.guard, 'box', 0x4c463c, 0, 0, -.065, .07, .68, .04);
         this.resize = () => {
@@ -243,7 +242,6 @@ export class GameScene {
             this.scene.remove(ghost.rig.root);
         this.ghosts = [];
         this.effects.clear();
-        this.grass.clear();
         this.flash = 0;
         this.visualTime = 0;
         this.actionStart = -100;
@@ -260,7 +258,6 @@ export class GameScene {
     }
     onVisual(event: VisualEvent) {
         if (event.type === 'action') {
-            if (event.action === 'place') this.grass.invalidate();
             this.handAction = event.action;
             this.actionStart = this.visualTime;
             if (event.action === 'staff' && this.engine) {
@@ -269,7 +266,6 @@ export class GameScene {
             }
         }
         else if (event.type === 'gather') {
-            if (this.engine?.state.nodes.find(n => n.id === event.id)?.depleted) this.grass.invalidate();
             const g = this.objects.get(event.id);
             if (g)
                 g.userData.shakeAt = this.visualTime;
@@ -525,7 +521,6 @@ export class GameScene {
             this.held.visible = false;
             this.guard.visible = false;
         }
-        this.grass.update(s.seed, this.camera.position.x, this.camera.position.z, s.buildings, s.nodes, this.visualTime);
         const time = this.engine ? s.time % 720 : 430, daylight = time < 450 ? 1 : time < 510 ? 1 - (time - 450) / 60 * .9 : time < 690 ? .1 : .1 + (time - 690) / 30 * .9;
         const sky = new THREE.Color().lerpColors(new THREE.Color(0x10202f), new THREE.Color(time > 420 && time < 510 ? 0xc3aaa0 : 0xaac3bb), daylight);
         this.scene.background = sky;
@@ -571,7 +566,6 @@ export class GameScene {
         this.events.abort();
         this.setEngine(null);
         this.effects.dispose();
-        this.grass.dispose();
         this.renderer.dispose();
         this.ground.geometry.dispose();
         this.water.geometry.dispose();

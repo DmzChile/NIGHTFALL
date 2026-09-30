@@ -15,6 +15,7 @@ export function validateWorldState(value: unknown): State {
     requireValid(record(value), '월드 데이터가 없습니다.');
     const s = value as unknown as State;
     requireValid(s.formatVersion === 1 && s.generatorVersion === 1 && s.contentVersion === 1, '지원하지 않는 저장 버전입니다.');
+    requireValid(s.terrainVersion === undefined || s.terrainVersion === 1 || s.terrainVersion === 2, '지원하지 않는 지형 버전입니다.');
     requireValid(identity(s.id) && typeof s.name === 'string' && s.name.length <= 40 && typeof s.seed === 'string' && s.seed.length <= 64 && finite(s.time) && s.time >= 0 && integer(s.tick) && integer(s.generation) && integer(s.rng) && s.rng <= 0xffffffff && finite(s.created), '월드 정보가 손상되었습니다.');
     requireValid(['easy', 'normal', 'hard'].includes(s.difficulty) && ['normal', 'permadeath'].includes(s.mode) && ['alive', 'dead', 'ended'].includes(s.status), '게임 모드가 잘못되었습니다.');
     for (const key of ['nodes', 'buildings', 'enemies', 'projectiles', 'drops', 'nightPlan', 'quests', 'discovered'] as const)
