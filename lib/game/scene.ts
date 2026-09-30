@@ -1,3 +1,7 @@
+import { creaturePose, handPose, MotionSample, damp, type HandAction } from './animation';
+import { createCreatureRig, poseCreature, type CreatureRig } from './rig';
+import { EffectPool } from './effects';
+import type { VisualEvent } from './visual-events';
 import * as THREE from 'three';
 import { Engine } from './engine';
 import { biome, height, createWorld, selected, type State } from './model';
@@ -12,6 +16,19 @@ export class GameScene {
     moonOrb: THREE.Mesh;
     root = new THREE.Group();
     held = new THREE.Group();
+    guard = new THREE.Group();
+    effects = new EffectPool();
+    rigs = new WeakMap<THREE.Group, CreatureRig>();
+    ghosts: {
+        rig: CreatureRig;
+        age: number;
+    }[] = [];
+    visualTime = 0;
+    handAction: HandAction = 'melee';
+    actionStart = -100;
+    guardBlend = 0;
+    playerMotion: MotionSample | null = null;
+    aimCenter = new THREE.Vector2();
     ground: THREE.Mesh;
     water: THREE.Mesh;
     objects = new Map<string, THREE.Group>();
@@ -24,7 +41,6 @@ export class GameScene {
     last = 0;
     accum = 0;
     disposed = false;
-    swing = 0;
     flash = 0;
     contextLost = false;
     resize: () => void;
@@ -62,7 +78,10 @@ export class GameScene {
         this.sunOrb = new THREE.Mesh(new THREE.SphereGeometry(5, 12, 8), new THREE.MeshBasicMaterial({ color: 0xffdc9a }));
         this.moonOrb = new THREE.Mesh(new THREE.SphereGeometry(4, 12, 8), new THREE.MeshBasicMaterial({ color: 0xb7d4e0 }));
         this.scene.add(this.sunOrb, this.moonOrb);
-        this.camera.add(this.held);
+        this.camera.add(this.held, this.guard);
+        this.scene.add(this.effects.mesh);
+        this.mesh(this.guard, 'box', 0x806347, 0, 0, 0, .55, .65, .1);
+        this.mesh(this.guard, 'box', 0x4c463c, 0, 0, -.065, .07, .68, .04);
         this.resize = () => {
             const w = this.host.clientWidth, h = this.host.clientHeight;
             this.camera.aspect = w / h;
@@ -147,44 +166,9 @@ export class GameScene {
         return g;
     }
     makeEnemy(kind: string) {
-        const g = new THREE.Group(), d = MONSTERS[kind];
-        if (kind === 'slime') {
-            this.mesh(g, 'rock', d.color, 0, .55, 0, .9, .65, .9);
-        }
-        else if (['wolf', 'cow', 'sheep', 'bird', 'forest_boss'].includes(kind)) {
-            this.mesh(g, 'box', d.color, 0, .85, 0, .85, .75, 1.6);
-            this.mesh(g, 'box', kind === 'sheep' ? 0x6a685a : d.color, 0, 1.2, -.8, .5, .5, .6);
-            for (const x of [-.28, .28])
-                for (const z of [-.55, .55])
-                    this.mesh(g, 'box', 0x4d4b42, x, .32, z, .14, .65, .14);
-            if (kind === 'bird')
-                g.scale.setScalar(.38);
-        }
-        else if (kind === 'spider') {
-            this.mesh(g, 'rock', d.color, 0, .4, 0, .75, .4, .75);
-            for (let i = 0; i < 8; i++) {
-                const m = this.mesh(g, 'box', d.color, Math.cos(i * Math.PI / 4), .2, Math.sin(i * Math.PI / 4), .65, .1, .12);
-                m.rotation.y = -i * Math.PI / 4;
-            }
-        }
-        else {
-            const large = ['golem', 'rock_boss', 'brute'].includes(kind);
-            this.mesh(g, large ? 'rock' : 'box', d.color, 0, 1, 0, .65, 1.05, .4);
-            this.mesh(g, 'box', d.color, 0, 1.9, 0, .5, .5, .5);
-            this.mesh(g, 'box', 0xedd3a0, -.13, 1.96, -.26, .08, .06, .025);
-            this.mesh(g, 'box', 0xedd3a0, .13, 1.96, -.26, .08, .06, .025);
-            for (const x of [-.21, .21])
-                this.mesh(g, 'box', 0x384946, x, .4, 0, .23, .8, .3);
-            for (const x of [-.55, .55])
-                this.mesh(g, 'box', d.color, x, 1.05, -.12, .2, .8, .2);
-            if (d.role === 'magic')
-                this.mesh(g, 'cone', d.color, 0, 2.4, 0, .47, .8, .47);
-            if (large)
-                g.scale.setScalar(1.3);
-        }
-        if (d.boss)
-            g.scale.multiplyScalar(2);
-        return g;
+        const rig = createCreatureRig(kind, this.mesh.bind(this));
+        this.rigs.set(rig.root, rig);
+        return rig.root;
     }
     makeBuilding(kind: string) {
         const g = new THREE.Group();
@@ -240,18 +224,83 @@ export class GameScene {
         return g;
     }
     setEngine(engine: Engine | null) {
+        if (this.engine) {
+            this.engine.onAttack = () => {
+            };
+            this.engine.onHit = () => {
+            };
+            this.engine.onVisual = () => {
+            };
+        }
         this.engine = engine;
         for (const g of this.objects.values())
             this.root.remove(g);
         this.objects.clear();
+        for (const ghost of this.ghosts)
+            this.scene.remove(ghost.rig.root);
+        this.ghosts = [];
+        this.effects.clear();
+        this.flash = 0;
+        this.visualTime = 0;
+        this.actionStart = -100;
+        this.guardBlend = 0;
+        this.playerMotion = null;
+        this.held.clear();
+        delete this.held.userData.id;
         if (engine) {
-            engine.onAttack = () => {
-                this.swing = 1;
-            };
             engine.onHit = () => {
                 this.flash = 1;
             };
+            engine.onVisual = event => this.onVisual(event);
         }
+    }
+    onVisual(event: VisualEvent) {
+        if (event.type === 'action') {
+            this.handAction = event.action;
+            this.actionStart = this.visualTime;
+            if (event.action === 'staff' && this.engine) {
+                const p = this.engine.state.player;
+                this.effects.emit(p.x - Math.sin(p.yaw), height(p.x, p.z) + p.y + 1.5, p.z - Math.cos(p.yaw), event.item === 'fire_staff' ? 0xffb36a : 0xa1deeb, 8);
+            }
+        }
+        else if (event.type === 'gather') {
+            const g = this.objects.get(event.id);
+            if (g)
+                g.userData.shakeAt = this.visualTime;
+            this.effects.emit(event.x, height(event.x, event.z) + .7, event.z, NODES[event.kind].color, 10);
+        }
+        else {
+            const g = this.objects.get(event.id);
+            if (g)
+                g.userData.hitAt = this.visualTime;
+            this.effects.emit(event.x, height(event.x, event.z) + 1, event.z, event.dead ? 0xddb474 : 0xe28e79, event.dead ? 16 : 7);
+            if (event.dead && g) {
+                const rig = this.rigs.get(g);
+                if (rig) {
+                    this.root.remove(g);
+                    this.objects.delete(event.id);
+                    this.scene.add(g);
+                    this.ghosts.push({ rig, age: 0 });
+                    if (this.ghosts.length > 12) {
+                        const old = this.ghosts.shift()!;
+                        this.scene.remove(old.rig.root);
+                    }
+                }
+            }
+        }
+    }
+    animateGhosts(dt: number) {
+        for (const ghost of this.ghosts) {
+            ghost.age += dt;
+            poseCreature(ghost.rig, creaturePose(ghost.rig.profile, this.visualTime, 0, 'chase', 0, 0, ghost.age / .45));
+        }
+        this.ghosts = this.ghosts.filter(ghost => {
+            if (ghost.age >= .45) {
+                this.scene.remove(ghost.rig.root);
+                return false;
+            }
+            return true;
+        });
     }
     installInput() {
         const sig = { signal: this.events.signal };
@@ -342,7 +391,7 @@ export class GameScene {
             this.engine.notify('마우스 잠금을 허용한 뒤 다시 계속하기를 누르세요.');
         }
     }
-    sync() {
+    sync(dt: number) {
         const s = this.engine?.state || this.preview, live = new Set<string>();
         const view = this.engine ? s.player : { x: 12, z: 35 };
         const put = (id: string, kind: string, x: number, z: number, type: string, yaw = 0) => {
@@ -356,37 +405,61 @@ export class GameScene {
                     this.mesh(g, 'box', 0xc8ac76, 0, .25, 0, .35, .4, .35);
                 if (type === 'projectile')
                     this.mesh(g, 'rock', kind.includes('arrow') ? 0xe0d9b7 : 0xb999df, 0, 0, 0, .09, .09, .3);
-                g.userData = { target: { kind: type, id } };
+                g.userData.target = { kind: type, id };
                 g.traverse(o => {
                     o.userData.target = { kind: type, id };
                 });
                 this.objects.set(id, g);
                 this.root.add(g);
             }
-            g.position.set(x, height(x, z), z);
-            g.rotation.y = yaw;
+            if (type === 'enemy' && g.userData.ready && Math.hypot(g.position.x - x, g.position.z - z) < 8) {
+                g.position.x = damp(g.position.x, x, 20, dt);
+                g.position.z = damp(g.position.z, z, 20, dt);
+                g.position.y = height(g.position.x, g.position.z);
+            }
+            else
+                g.position.set(x, height(x, z), z);
+            g.userData.ready = true;
+            if (type !== 'enemy')
+                g.rotation.y = yaw;
             return g;
         };
         for (const n of s.nodes)
-            if (!n.depleted)
-                put(n.id, n.kind, n.x, n.z, 'node');
+            if (!n.depleted) {
+                const g = put(n.id, n.kind, n.x, n.z, 'node');
+                if (g) {
+                    const age = this.visualTime - (g.userData.shakeAt ?? -100), shake = Math.max(0, 1 - age / .22);
+                    g.rotation.z = Math.sin(age * 45) * shake * .07;
+                }
+            }
         for (const b of s.buildings) {
             const g = put(b.id, b.kind, b.x, b.z, 'building', b.yaw);
             if (g && b.kind === 'campfire')
-                g.children[7]?.scale.setScalar(.9 + .15 * Math.sin(performance.now() * .008));
+                g.children[7]?.scale.setScalar(.9 + .15 * Math.sin(this.visualTime * 8));
         }
         for (const e of s.enemies) {
-            const g = put(e.id, e.kind, e.x, e.z, 'enemy', Math.atan2(e.x - s.player.x, e.z - s.player.z));
+            const g = put(e.id, e.kind, e.x, e.z, 'enemy');
+            if (!g)
+                continue;
+            const motion: MotionSample = g.userData.motion ??= new MotionSample(e.x, e.z, s.time);
+            motion.update(e.x, e.z, s.time);
+            const rig = this.rigs.get(g)!;
+            const chasing = e.state === 'chase' || e.animal;
+            const facing = chasing && motion.speed > .05 ? motion.heading : Math.atan2(e.x - s.player.x, e.z - s.player.z);
+            const difference = Math.atan2(Math.sin(facing - g.rotation.y), Math.cos(facing - g.rotation.y));
+            g.rotation.y += damp(0, difference, 12, dt);
+            const def = MONSTERS[e.kind], total = e.state === 'windup' ? (def.boss ? 1.1 : def.role === 'melee' ? .6 : .8) : (def.boss ? 1.3 : 1);
+            const progress = e.animal ? 0 : 1 - e.timer / total;
+            const impact = Math.max(0, 1 - (this.visualTime - (g.userData.hitAt ?? -100)) / .22);
+            poseCreature(rig, creaturePose(rig.profile, this.visualTime, motion.speed, e.animal ? 'chase' : e.state, progress, impact));
+        }
+        for (const d of s.drops) {
+            const g = put(d.id, '', d.x, d.z, 'drop');
             if (g) {
-                g.position.y += e.kind === 'slime' ? Math.max(0, Math.sin(s.time * 4) * .25) : 0;
-                if (e.state === 'windup')
-                    g.rotation.z = Math.sin(s.time * 15) * .1;
-                else
-                    g.rotation.z = 0;
+                g.rotation.y = this.visualTime * .6;
+                g.position.y += .05 + Math.sin(this.visualTime * 3) * .04;
             }
         }
-        for (const d of s.drops)
-            put(d.id, '', d.x, d.z, 'drop');
         for (const p of s.projectiles) {
             const g = put(p.id, p.type, p.x, p.z, 'projectile');
             if (g) {
@@ -404,7 +477,9 @@ export class GameScene {
             this.camera.position.set(p.x, height(p.x, p.z) + 1.65 + p.y, p.z);
             this.camera.rotation.order = 'YXZ';
             this.camera.rotation.set(p.pitch, p.yaw, 0);
-            this.ray.setFromCamera(new THREE.Vector2(), this.camera);
+            this.camera.updateMatrixWorld();
+            this.root.updateMatrixWorld(true);
+            this.ray.setFromCamera(this.aimCenter, this.camera);
             this.ray.far = 18;
             const hits = this.ray.intersectObjects(this.root.children, true);
             const hit = hits.find(h => h.object.userData.target);
@@ -419,7 +494,21 @@ export class GameScene {
                     this.mesh(group, 'box', 0xb78e72, .36, -.32, -.62, .18, .35, .25);
                 }
                 else if (id.includes('bow')) {
-                    this.mesh(group, 'cylinder', 0x816340, .32, -.15, -.65, .04, .85, .04);
+                    const upper = this.mesh(group, 'cylinder', 0x816340, .32, .05, -.69, .035, .48, .035);
+                    upper.rotation.x = -.28;
+                    const lower = this.mesh(group, 'cylinder', 0x816340, .32, -.37, -.69, .035, .48, .035);
+                    lower.rotation.x = .28;
+                    const string = new THREE.Group();
+                    string.name = 'bow-string';
+                    string.position.set(.32, -.16, -.756);
+                    for (const side of [1, -1])
+                        this.mesh(string, 'cylinder', 0xcfc5a8, 0, side * .218, 0, .009, .436, .009);
+                    group.add(string);
+                }
+                else if (id === 'fishing_rod') {
+                    this.mesh(group, 'cylinder', 0x967147, .32, -.1, -.65, .025, 1.25, .025);
+                    const line = this.mesh(group, 'cylinder', 0xc7d4d1, .32, -.2, -.94, .006, .9, .006);
+                    line.rotation.x = .5;
                 }
                 else if (id.includes('staff')) {
                     this.mesh(group, 'cylinder', 0x796444, .35, -.2, -.65, .04, .9, .04);
@@ -438,15 +527,32 @@ export class GameScene {
                 }
                 this.held.add(group);
             }
+            this.playerMotion ??= new MotionSample(p.x, p.z, s.time);
+            this.playerMotion.update(p.x, p.z, s.time);
+            const twoHanded = id.includes('bow') || id.endsWith('_staff'), hasShield = p.items.some(i => i.id === 'shield' && (i.dur || 0) > 0);
+            this.guardBlend = damp(this.guardBlend, this.engine.blocking && hasShield && !twoHanded && p.stamina > 0 && s.time - p.actionAt >= .25 ? 1 : 0, 14, dt);
+            const pose = handPose(this.handAction, this.visualTime - this.actionStart, this.visualTime, this.playerMotion.speed, this.guardBlend, !!p.fishing);
             this.held.visible = !this.engine.paused;
-            this.held.rotation.x = -Math.sin(this.swing * Math.PI) * .7;
-            this.held.rotation.z = Math.sin(this.swing * Math.PI) * .3;
+            this.held.position.set(pose.x, pose.y, pose.z);
+            this.held.rotation.set(pose.pitch, 0, pose.roll);
+            const string = this.held.getObjectByName('bow-string');
+            if (string) {
+                string.children.forEach((segment, i) => {
+                    segment.position.z = pose.bowPull / 2;
+                    segment.scale.y = Math.hypot(.436, pose.bowPull);
+                    segment.rotation.x = (i ? 1 : -1) * Math.atan2(pose.bowPull, .436);
+                });
+            }
+            this.guard.visible = !this.engine.paused && hasShield && !twoHanded;
+            this.guard.position.set(-.46 + this.guardBlend * .12, -.58 + this.guardBlend * .4, -.65);
+            this.guard.rotation.set(-this.guardBlend * .16, .2 + this.guardBlend * .3, this.guardBlend * .08);
         }
         else {
-            const t = performance.now() * .000025;
+            const t = this.visualTime * .025;
             this.camera.position.set(12 + Math.sin(t) * 3, 5, 35);
             this.camera.lookAt(-5, 3, -10);
             this.held.visible = false;
+            this.guard.visible = false;
         }
         const time = this.engine ? s.time % 720 : 430, daylight = time < 450 ? 1 : time < 510 ? 1 - (time - 450) / 60 * .9 : time < 690 ? .1 : .1 + (time - 690) / 30 * .9;
         const sky = new THREE.Color().lerpColors(new THREE.Color(0x10202f), new THREE.Color(time > 420 && time < 510 ? 0xc3aaa0 : 0xaac3bb), daylight);
@@ -477,10 +583,13 @@ export class GameScene {
         }
         if (steps === 5)
             this.accum = 0;
-        this.swing = Math.max(0, this.swing - dt * 3);
         this.flash = Math.max(0, this.flash - dt * 3);
         if (!this.contextLost) {
-            this.sync();
+            const visualDt = this.engine?.paused ? 0 : dt;
+            this.visualTime += visualDt;
+            this.effects.step(visualDt);
+            this.animateGhosts(visualDt);
+            this.sync(visualDt);
             this.renderer.render(this.scene, this.camera);
         }
     };
@@ -488,9 +597,17 @@ export class GameScene {
         this.disposed = true;
         cancelAnimationFrame(this.frame);
         this.events.abort();
+        this.setEngine(null);
+        this.effects.dispose();
         this.renderer.dispose();
         this.ground.geometry.dispose();
         this.water.geometry.dispose();
+        (this.ground.material as THREE.Material).dispose();
+        (this.water.material as THREE.Material).dispose();
+        this.sunOrb.geometry.dispose();
+        this.moonOrb.geometry.dispose();
+        (this.sunOrb.material as THREE.Material).dispose();
+        (this.moonOrb.material as THREE.Material).dispose();
         for (const m of this.materials.values())
             m.dispose();
         for (const g of this.geometries.values())

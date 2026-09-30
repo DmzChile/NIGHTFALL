@@ -1,3 +1,4 @@
+import type { VisualEvent } from './visual-events';
 import { discoverItems, ensureProgression } from './progression';
 import { REGION_ENEMIES, regionWarning } from './regions';
 import { segmentSphere } from './collision';
@@ -33,6 +34,16 @@ export class Engine {
     };
     onAttack: () => void = () => {
     };
+    onVisual: (event: VisualEvent) => void = () => {
+    };
+    /** Cosmetic callbacks must not interrupt inventory or damage transactions. */
+    visual(event: VisualEvent) {
+        try {
+            this.onVisual(event);
+        }
+        catch {
+        }
+    }
     onSave: () => void = () => {
     };
     blocking = false;
@@ -45,7 +56,7 @@ export class Engine {
     constructor(s: State, storage: SaveManager) {
         ensureProgression(s);
         this.state = s;
-        this.lastStamina=s.player.staminaAt??0;
+        this.lastStamina = s.player.staminaAt ?? 0;
         this.storage = storage;
         this.panel = s.status === 'alive' ? 'pause' : 'death';
         if (s.generation > 0)
@@ -97,6 +108,8 @@ export class Engine {
         if (!it)
             return;
         const d = ITEMS[it.id];
+        if (!['food', 'potion'].includes(d.kind))
+            return;
         if (d.kind === 'food') {
             if (s.time - p.foodAt < 2)
                 return;
@@ -144,6 +157,7 @@ export class Engine {
             p.potionAt = s.time;
             this.notify(`${d.name} 사용`);
         }
+        this.visual({ type: 'action', action: 'consume', item: it.id });
         discoverItems(s);
         normalizeSlots(s);
         this.dirty = true;
@@ -305,6 +319,8 @@ export class Engine {
             current.dur = Math.max(0, current.dur - 1);
         s.player.actionAt = s.time;
         this.onAttack();
+        this.visual({ type: 'action', action: 'gather', item: it?.id || 'hand' });
+        this.visual({ type: 'gather', id: n.id, kind: n.kind, x: n.x, z: n.z });
         this.dirty = true;
     }
     place(it: Stack) {
@@ -317,6 +333,7 @@ export class Engine {
             return;
         const b: Building = { id: uuid(), kind: it.id, x, z, yaw: p.yaw, hp: it.id === 'wall' ? 250 : 200, items: [], jobs: [], fuel: 0 };
         s.buildings.push(b);
+        this.visual({ type: 'action', action: 'place', item: it.id });
         take(p.items, it.id, 1);
         if (it.id === 'bedroll')
             p.bed = b.id;
@@ -429,7 +446,6 @@ export class Engine {
             return;
         }
         p.actionAt = s.time;
-        this.onAttack();
         if (it?.id.includes('bow') || it?.id.endsWith('_staff')) {
             let type = 'arrow';
             if (it.id.endsWith('_staff')) {
@@ -459,6 +475,8 @@ export class Engine {
             if (e)
                 this.hitEnemy(e, d?.damage || 5, it?.id || 'hand');
         }
+        this.onAttack();
+        this.visual({ type: 'action', action: it?.id.includes('bow') ? 'bow' : it?.id.endsWith('_staff') ? 'staff' : 'melee', item: it?.id || 'hand' });
         if (it?.dur !== undefined)
             it.dur = Math.max(0, it.dur - 1);
         discoverItems(s);
@@ -487,6 +505,8 @@ export class Engine {
         if (type === 'fire_staff' && e.kind === 'ember')
             damage *= .5;
         e.hp -= damage > 0 ? Math.max(1, Math.round(damage)) : 0;
+        if (damage > 0)
+            this.visual({ type: 'enemy-hit', id: e.id, x: e.x, z: e.z, dead: e.hp <= 0 });
         if (e.animal) {
             e.timer = 3;
             e.state = 'recover';
@@ -547,7 +567,7 @@ export class Engine {
         const twoHanded = held?.id.includes('bow') || held?.id.endsWith('_staff');
         if (direct && this.blocking && facing && !twoHanded && s.time - p.actionAt >= .25 && p.items.some(i => i.id === 'shield' && (i.dur || 0) > 0)) {
             this.lastStamina = s.time;
-            p.staminaAt=s.time;
+            p.staminaAt = s.time;
             if (p.stamina >= 12) {
                 p.stamina -= 12;
                 result *= .3;
@@ -706,7 +726,7 @@ export class Engine {
             if (run) {
                 p.stamina = Math.max(0, p.stamina - 12 * dt);
                 this.lastStamina = s.time;
-            p.staminaAt=s.time;
+                p.staminaAt = s.time;
             }
             const nx = p.x + (Math.cos(p.yaw) * ix - Math.sin(p.yaw) * iz) * speed * dt, nz = p.z + (-Math.sin(p.yaw) * ix - Math.cos(p.yaw) * iz) * speed * dt;
             const blocked = (x: number, z: number) => Math.hypot(x, z) > 465 || s.nodes.some(n => !n.depleted && ['tree', 'hardtree', 'rock', 'iron'].includes(n.kind) && distance(n, { x, z }) < .9) || s.buildings.some(b => ['wall', 'chest', 'furnace', 'advanced_furnace', 'anvil'].includes(b.kind) && distance(b, { x, z }) < 1);
@@ -727,7 +747,7 @@ export class Engine {
             p.stamina -= 25;
             p.dodgeUntil = s.time + .15;
             this.lastStamina = s.time;
-            p.staminaAt=s.time;
+            p.staminaAt = s.time;
             const dx = p.x - Math.sin(p.yaw) * 1.3, dz = p.z - Math.cos(p.yaw) * 1.3;
             if (Math.hypot(dx, dz) < 465 && !s.buildings.some(b => ['wall', 'door', 'chest'].includes(b.kind) && distance(b, { x: dx, z: dz }) < 1.2)) {
                 p.x = dx;
@@ -1029,6 +1049,8 @@ export class Engine {
     dispose() {
         this.disposed = true;
         this.keys.clear();
+        this.onVisual = () => {
+        };
         this.storage.lockLost = () => {
         };
     }
