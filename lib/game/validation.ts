@@ -1,6 +1,7 @@
 import { ITEMS, MONSTERS, NODES, RECIPES } from './data';
 import type { State, Stack } from './model';
 import { REGIONS } from './regions';
+import { isTree, nodeDefinition, TREE_SIZES, TREE_SPECIES } from './woodland';
 const record = (v: unknown): v is Record<string, unknown> => v !== null && typeof v === 'object' && !Array.isArray(v);
 const finite = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
 const integer = (v: unknown): v is number => finite(v) && Number.isSafeInteger(v) && v >= 0;
@@ -16,6 +17,7 @@ export function validateWorldState(value: unknown): State {
     const s = value as unknown as State;
     requireValid(s.formatVersion === 1 && s.generatorVersion === 1 && s.contentVersion === 1, '지원하지 않는 저장 버전입니다.');
     requireValid(s.terrainVersion === undefined || s.terrainVersion === 1 || s.terrainVersion === 2, '지원하지 않는 지형 버전입니다.');
+    requireValid(s.forestVersion === undefined || s.forestVersion === 1, '지원하지 않는 숲 버전입니다.');
     requireValid(identity(s.id) && typeof s.name === 'string' && s.name.length <= 40 && typeof s.seed === 'string' && s.seed.length <= 64 && finite(s.time) && s.time >= 0 && integer(s.tick) && integer(s.generation) && integer(s.rng) && s.rng <= 0xffffffff && finite(s.created), '월드 정보가 손상되었습니다.');
     requireValid(['easy', 'normal', 'hard'].includes(s.difficulty) && ['normal', 'permadeath'].includes(s.mode) && ['alive', 'dead', 'ended'].includes(s.status), '게임 모드가 잘못되었습니다.');
     for (const key of ['nodes', 'buildings', 'enemies', 'projectiles', 'drops', 'nightPlan', 'quests', 'discovered'] as const)
@@ -61,8 +63,14 @@ export function validateWorldState(value: unknown): State {
         requireValid(record(entity) && identity(entity.id) && !entityIds.has(entity.id) && finite(entity.x) && finite(entity.z) && Math.abs(entity.x) <= 600 && Math.abs(entity.z) <= 600, '엔티티 참조가 잘못되었습니다.');
         entityIds.add(entity.id);
     }
-    for (const n of s.nodes)
+    for (const n of s.nodes) {
         requireValid(known(NODES, n.kind) && finite(n.hp) && finite(n.readyAt) && typeof n.depleted === 'boolean', '자원 정보가 손상되었습니다.');
+        if (n.tree !== undefined) {
+            const t = n.tree;
+            requireValid(isTree(n) && record(t) && known(TREE_SIZES, t.size) && known(TREE_SPECIES, t.species) && typeof t.autumn === 'boolean' && (t.variant === 0 || t.variant === 1) && !(t.species === 'pine' && t.autumn), '나무 상태가 잘못되었습니다.');
+            requireValid(n.hp >= 0 && n.hp <= nodeDefinition(n).hp && (!n.depleted || n.hp === 0), '나무 내구도가 잘못되었습니다.');
+        }
+    }
     const jobIds = new Set<string>();
     for (const b of s.buildings) {
         requireValid((known(ITEMS, b.kind) && ITEMS[b.kind].kind === 'building') || ['heal_totem', 'challenge_totem', 'forest_altar', 'rock_altar', 'ruin_altar', 'final_altar'].includes(b.kind), '구조물 종류가 없습니다.');

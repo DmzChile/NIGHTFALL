@@ -4,6 +4,9 @@ import { EffectPool } from './effects';
 import type { VisualEvent } from './visual-events';
 import { terrainVertexHeight, terrainColor, TERRAIN_SIZE, TERRAIN_SEGMENTS } from './terrain';
 import { createViewModel, viewModelTransform } from './viewmodel';
+import { TreeField } from './trees';
+import { SkyBackdrop } from './sky';
+import { isTree } from './woodland';
 import * as THREE from 'three';
 import { Engine } from './engine';
 import { biome, height, createWorld, selected, type State } from './model';
@@ -14,8 +17,8 @@ export class GameScene {
     camera = new THREE.PerspectiveCamera(72, 1, .1, 240);
     sun = new THREE.DirectionalLight(0xfff0cb, 2.4);
     ambient = new THREE.HemisphereLight(0xb3d0cc, 0x3b4d3c, 2.1);
-    sunOrb: THREE.Mesh;
-    moonOrb: THREE.Mesh;
+    trees = new TreeField();
+    sky = new SkyBackdrop();
     root = new THREE.Group();
     held = new THREE.Group();
     guard = new THREE.Group();
@@ -55,9 +58,8 @@ export class GameScene {
         this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
         this.renderer.toneMappingExposure = 1.1;
         this.host.appendChild(this.renderer.domElement);
-        this.scene.background = new THREE.Color(0xaac3bb);
         this.scene.fog = new THREE.FogExp2(0xaac3bb, .0065);
-        this.scene.add(this.ambient, this.sun, this.root, this.camera);
+        this.scene.add(this.ambient, this.sun, this.sun.target, this.root, this.trees.root, this.camera);
         this.sun.position.set(-30, 60, -20);
         const g = new THREE.PlaneGeometry(TERRAIN_SIZE, TERRAIN_SIZE, TERRAIN_SEGMENTS, TERRAIN_SEGMENTS);
         g.rotateX(-Math.PI / 2);
@@ -77,9 +79,6 @@ export class GameScene {
         this.water.rotation.x = -Math.PI / 2;
         this.water.position.y = -1.2;
         this.scene.add(this.water);
-        this.sunOrb = new THREE.Mesh(new THREE.SphereGeometry(5, 12, 8), new THREE.MeshBasicMaterial({ color: 0xffdc9a }));
-        this.moonOrb = new THREE.Mesh(new THREE.SphereGeometry(4, 12, 8), new THREE.MeshBasicMaterial({ color: 0xb7d4e0 }));
-        this.scene.add(this.sunOrb, this.moonOrb);
         this.camera.add(this.held, this.guard);
         this.scene.add(this.effects.mesh);
         this.mesh(this.guard, 'box', 0x806347, 0, 0, 0, .55, .65, .1);
@@ -128,12 +127,7 @@ export class GameScene {
     }
     makeNode(kind: string) {
         const g = new THREE.Group(), d = NODES[kind];
-        if (kind.includes('tree')) {
-            this.mesh(g, 'cylinder', 0x66513c, 0, 1.5, 0, .27, 3, .27);
-            this.mesh(g, 'cone', d.color, 0, 3.4, 0, 1.9, 3.1, 1.9);
-            this.mesh(g, 'cone', d.color + 0x040400, 0, 4.7, 0, 1.5, 2.6, 1.5);
-        }
-        else if (['rock', 'iron', 'coal', 'silver', 'gold', 'mithril', 'obsidian', 'sulfur', 'crystal'].includes(kind)) {
+        if (['rock', 'iron', 'coal', 'silver', 'gold', 'mithril', 'obsidian', 'sulfur', 'crystal'].includes(kind)) {
             this.mesh(g, 'rock', 0x7a837b, 0, .7, 0, 1.15, .9, 1);
             if (kind !== 'rock') {
                 for (let i = 0; i < 4; i++) {
@@ -226,6 +220,7 @@ export class GameScene {
         return g;
     }
     setEngine(engine: Engine | null) {
+        this.trees.clear();
         if (this.engine) {
             this.engine.onAttack = () => {
             };
@@ -266,6 +261,7 @@ export class GameScene {
             }
         }
         else if (event.type === 'gather') {
+            if (isTree({ kind: event.kind })) this.trees.shake(event.id, this.visualTime);
             const g = this.objects.get(event.id);
             if (g)
                 g.userData.shakeAt = this.visualTime;
@@ -427,13 +423,14 @@ export class GameScene {
             return g;
         };
         for (const n of s.nodes)
-            if (!n.depleted) {
+            if (!n.depleted && !isTree(n)) {
                 const g = put(n.id, n.kind, n.x, n.z, 'node');
                 if (g) {
                     const age = this.visualTime - (g.userData.shakeAt ?? -100), shake = Math.max(0, 1 - age / .22);
                     g.rotation.z = Math.sin(age * 45) * shake * .07;
                 }
             }
+        this.trees.update(s, view.x, view.z, this.visualTime);
         for (const b of s.buildings) {
             const g = put(b.id, b.kind, b.x, b.z, 'building', b.yaw);
             if (g && b.kind === 'campfire')
@@ -483,9 +480,12 @@ export class GameScene {
             this.root.updateMatrixWorld(true);
             this.ray.setFromCamera(this.aimCenter, this.camera);
             this.ray.far = 18;
-            const hits = this.ray.intersectObjects(this.root.children, true);
-            const hit = hits.find(h => h.object.userData.target);
-            this.engine.target = hit ? { ...hit.object.userData.target, distance: hit.distance } : null;
+            const hits = this.ray.intersectObjects([...this.root.children, this.trees.root], true);
+            this.engine.target = null;
+            for (const hit of hits) {
+                const target = this.trees.target(hit) || (hit.object.userData.target ? { ...hit.object.userData.target, distance: hit.distance } : null);
+                if (target) { this.engine.target = target; break; }
+            }
             const it = selected(s);
             const id = it?.id || 'hand';
             if (this.held.userData.id !== id) {
@@ -521,18 +521,12 @@ export class GameScene {
             this.held.visible = false;
             this.guard.visible = false;
         }
-        const time = this.engine ? s.time % 720 : 430, daylight = time < 450 ? 1 : time < 510 ? 1 - (time - 450) / 60 * .9 : time < 690 ? .1 : .1 + (time - 690) / 30 * .9;
-        const sky = new THREE.Color().lerpColors(new THREE.Color(0x10202f), new THREE.Color(time > 420 && time < 510 ? 0xc3aaa0 : 0xaac3bb), daylight);
-        this.scene.background = sky;
-        (this.scene.fog as THREE.FogExp2).color.copy(sky);
+        const sky = this.sky.update(this.camera, this.engine ? s.time : 430, s.blood), daylight = sky.daylight;
+        (this.scene.fog as THREE.FogExp2).color.copy(sky.color);
         this.ambient.intensity = .35 + daylight * 1.7;
         this.sun.intensity = .1 + daylight * 2.2;
-        const orbit = time < 510 ? time / 510 * Math.PI : Math.PI + (time - 510) / 210 * Math.PI;
-        this.sun.position.set(Math.cos(orbit) * 90, Math.sin(orbit) * 70, -50);
-        this.sunOrb.position.copy(this.sun.position);
-        this.moonOrb.position.set(-Math.cos(orbit) * 90, -Math.sin(orbit) * 70, -70);
-        this.sunOrb.visible = daylight > .2;
-        this.moonOrb.visible = daylight < .4;
+        this.sun.target.position.copy(this.camera.position);
+        this.sun.position.copy(this.camera.position).addScaledVector(daylight > .2 ? sky.sun : sky.moon, 90);
         (this.scene.fog as THREE.FogExp2).density = .0055 + (1 - daylight) * .002;
     }
     loop = (stamp: number) => {
@@ -557,24 +551,23 @@ export class GameScene {
             this.effects.step(visualDt);
             this.animateGhosts(visualDt);
             this.sync(visualDt);
-            this.renderer.render(this.scene, this.camera);
+            this.render();
         }
     };
+    render() { this.sky.render(this.renderer, this.scene, this.camera); }
     dispose() {
         this.disposed = true;
         cancelAnimationFrame(this.frame);
         this.events.abort();
         this.setEngine(null);
         this.effects.dispose();
+        this.trees.dispose();
+        this.sky.dispose();
         this.renderer.dispose();
         this.ground.geometry.dispose();
         this.water.geometry.dispose();
         (this.ground.material as THREE.Material).dispose();
         (this.water.material as THREE.Material).dispose();
-        this.sunOrb.geometry.dispose();
-        this.moonOrb.geometry.dispose();
-        (this.sunOrb.material as THREE.Material).dispose();
-        (this.moonOrb.material as THREE.Material).dispose();
         for (const m of this.materials.values())
             m.dispose();
         for (const g of this.geometries.values())

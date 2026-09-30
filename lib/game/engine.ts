@@ -1,10 +1,11 @@
 import type { VisualEvent } from './visual-events';
 import { migrateTerrain, terrainSlope } from './terrain';
+import { ensureForest, isTree, nodeDefinition, nodeRadius } from './woodland';
 import { discoverItems, ensureProgression } from './progression';
 import { REGION_ENEMIES, regionWarning } from './regions';
 import { segmentSphere } from './collision';
 import { SaveQueue } from './save-queue';
-import { ITEMS, NODES, MONSTERS, RECIPES, day, phase, type Recipe } from './data';
+import { ITEMS, MONSTERS, RECIPES, day, phase, type Recipe } from './data';
 import { addItem, capacity, count, craft, distance, height, normalizeSlots, makeEnemy, random, planNight, give, take, selected, stationFor, transactTransfer, uuid, biome, type State, type Building, type Stack, type Enemy } from './model';
 import { SaveManager, exportFile } from './storage';
 export type Target = {
@@ -56,6 +57,7 @@ export class Engine {
     private attackPressed = false;
     constructor(s: State, storage: SaveManager) {
         migrateTerrain(s);
+        ensureForest(s, biome);
         ensureProgression(s);
         this.state = s;
         this.lastStamina = s.player.staminaAt ?? 0;
@@ -285,7 +287,7 @@ export class Engine {
         const n = s.nodes.find(n => n.id === t.id);
         if (!n || n.depleted)
             return;
-        const d = NODES[n.kind], it = selected(s), tool = it ? ITEMS[it.id] : undefined;
+        const d = nodeDefinition(n), it = selected(s), tool = it ? ITEMS[it.id] : undefined;
         if (d.level > 0 && (!tool || tool.tool !== d.tool || (tool.level || 0) < d.level)) {
             this.notify(`필요 도구: ${d.tool === 'pick' ? '곡괭이' : '도끼'} 단계 ${d.level}`);
             return;
@@ -294,7 +296,8 @@ export class Engine {
             this.notify('도구를 수리하세요.');
             return;
         }
-        if (n.hp <= ((tool?.tool === d.tool) ? 3 : 1)) {
+        const damage = tool?.tool === d.tool ? (isTree(n) ? 1 + (tool?.level || 1) * 2 : 3) : 1;
+        if (n.hp <= damage) {
             const items = structuredClone(s.player.items);
             if (!give(items, d.item, d.qty, capacity(s))) {
                 this.notify('인벤토리 공간이 부족합니다.');
@@ -306,7 +309,7 @@ export class Engine {
             n.readyAt = d.regen ? s.time + d.regen : 0;
             normalizeSlots(s);
             this.notify(`${ITEMS[d.item].name} +${d.qty}`);
-            if (n.kind === 'tree' && random(s) < .5)
+            if (isTree(n) && random(s) < .5)
                 addItem(s, 'resin', 1);
             if (n.kind === 'wheat' || n.kind === 'herb') {
                 if (random(s) < .25)
@@ -314,7 +317,7 @@ export class Engine {
             }
         }
         else {
-            n.hp -= tool?.tool === d.tool ? 3 : 1;
+            n.hp -= damage;
         }
         const current = it ? s.player.items.find(x => x.uid === it.uid) : undefined;
         if (current?.dur !== undefined)
@@ -327,7 +330,7 @@ export class Engine {
     }
     place(it: Stack) {
         const s = this.state, p = s.player, x = p.x - Math.sin(p.yaw) * 3, z = p.z - Math.cos(p.yaw) * 3;
-        if (Math.hypot(x, z) > 465 || s.buildings.some(b => distance(b, { x, z }) < 2.2) || s.nodes.some(n => !n.depleted && ['tree', 'hardtree', 'rock'].includes(n.kind) && distance(n, { x, z }) < 1.5)) {
+        if (Math.hypot(x, z) > 465 || s.buildings.some(b => distance(b, { x, z }) < 2.2) || s.nodes.some(n => !n.depleted && (isTree(n) || n.kind === 'rock') && distance(n, { x, z }) < (isTree(n) ? nodeRadius(n) + 1.1 : 1.5))) {
             this.notify('다른 물체와 겹쳐 배치할 수 없습니다.');
             return;
         }
@@ -733,7 +736,7 @@ export class Engine {
                 p.staminaAt = s.time;
             }
             const nx = p.x + (Math.cos(p.yaw) * ix - Math.sin(p.yaw) * iz) * speed * dt, nz = p.z + (-Math.sin(p.yaw) * ix - Math.cos(p.yaw) * iz) * speed * dt;
-            const blocked = (x: number, z: number) => Math.hypot(x, z) > 465 || s.nodes.some(n => !n.depleted && ['tree', 'hardtree', 'rock', 'iron'].includes(n.kind) && distance(n, { x, z }) < .9) || s.buildings.some(b => ['wall', 'chest', 'furnace', 'advanced_furnace', 'anvil'].includes(b.kind) && distance(b, { x, z }) < 1);
+            const blocked = (x: number, z: number) => Math.hypot(x, z) > 465 || s.nodes.some(n => !n.depleted && nodeRadius(n) > 0 && distance(n, { x, z }) < nodeRadius(n) + .35) || s.buildings.some(b => ['wall', 'chest', 'furnace', 'advanced_furnace', 'anvil'].includes(b.kind) && distance(b, { x, z }) < 1);
             if (!blocked(nx, p.z))
                 p.x = nx;
             if (!blocked(p.x, nz))
@@ -843,7 +846,7 @@ export class Engine {
         for (const n of s.nodes)
             if (n.depleted && n.readyAt > 0 && s.time >= n.readyAt && !s.buildings.some(b => distance(b, n) < 2)) {
                 n.depleted = false;
-                n.hp = NODES[n.kind].hp;
+                n.hp = nodeDefinition(n).hp;
             }
         for (const b of s.buildings) {
             const j = b.jobs[0];

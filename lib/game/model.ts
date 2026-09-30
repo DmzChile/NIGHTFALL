@@ -1,5 +1,6 @@
 import { starterRecipes, discoverItems, ensureProgression, recipeUnlocked } from './progression';
 import { terrainHeight, migrateTerrain, TERRAIN_VERSION } from './terrain';
+import { ensureForest, isTree, nodeDefinition, treeTraits, type TreeTraits } from './woodland';
 import { validateWorldState } from './validation';
 import { ITEMS, MONSTERS, NODES, day, tierCap, type Recipe } from './data';
 export type Stack = {
@@ -17,6 +18,7 @@ export type NodeState = {
     hp: number;
     depleted: boolean;
     readyAt: number;
+    tree?: TreeTraits;
 };
 export type Job = {
     id: string;
@@ -92,6 +94,7 @@ export type State = {
     contentVersion: 1;
     generatorVersion: 1;
     terrainVersion?: 1 | 2;
+    forestVersion?: 1;
     id: string;
     name: string;
     seed: string;
@@ -260,7 +263,15 @@ export function createWorld(name: string, seed: string, difficulty: State['diffi
     const s: State = { formatVersion: 1, contentVersion: 1, generatorVersion: 1, terrainVersion: TERRAIN_VERSION, id: uuid(), name: name.slice(0, 40) || '새로운 섬', seed: seed.slice(0, 64) || uuid().slice(0, 8), difficulty, mode, status: 'alive', time: 0, tick: 0, rng: 1, created: Date.now(), generation: 0, player: { x: 0, z: 8, y: 0, vy: 0, yaw: 0, pitch: 0, hp: 100, hunger: 100, stamina: 100, items: [], hotbar: Array(8).fill(null), selected: 0, armor: null, hitAt: -10, actionAt: -10, potionAt: -20, foodAt: -3, dodgeUntil: 0, poison: 0, curse: 0, slow: 0, healLeft: 0, healRate: 0, bed: null }, nodes: [], buildings: [], enemies: [], projectiles: [], drops: [], previousKills: 0, kills: {}, nightPlan: [], nightWave: 0, blood: false, lastBlood: 0, quests: [], discovered: ['초원'], knownItems: [], unlockedRecipes: starterRecipes(), regionNext: {} };
     s.rng = hash(s.seed);
     const gen = { rng: hash(s.seed + 'world') };
-    const node = (kind: string, x: number, z: number) => s.nodes.push({ id: `node-${s.nodes.length}`, kind, x, z, hp: NODES[kind].hp, depleted: false, readyAt: 0 });
+    const node = (kind: string, x: number, z: number) => {
+        const n: NodeState = { id: `node-${s.nodes.length}`, kind, x, z, hp: NODES[kind].hp, depleted: false, readyAt: 0 };
+        if (isTree(n)) {
+            n.tree = treeTraits(s.seed, n);
+            if (Math.hypot(x, z) < 38) n.tree.size = x < 0 ? 'small' : 'normal';
+            n.hp = nodeDefinition(n).hp;
+        }
+        s.nodes.push(n);
+    };
     // A reachable supply ring supplies the complete first crafting chain.
     for (let i = 0; i < 14; i++) {
         const angle = i * .9;
@@ -296,6 +307,7 @@ export function createWorld(name: string, seed: string, difficulty: State['diffi
         number
     ][])
         s.buildings.push({ id: uuid(), kind, x, z, yaw: 0, hp: 10000, items: [], jobs: [], fuel: 0, cooldown: 0, claimed: false });
+    ensureForest(s, biome);
     return s;
 }
 export function makeEnemy(s: State, kind: string, tier: number, x: number, z: number, animal = false, summon = false): Enemy {
@@ -424,6 +436,7 @@ export function transactTransfer(from: Stack[], to: Stack[], uid: string, cap: n
 export function validateState(v: unknown): State {
     const s = validateWorldState(v);
     migrateTerrain(s);
+    ensureForest(s, biome);
     ensureProgression(s);
     normalizeSlots(s);
     return s;
