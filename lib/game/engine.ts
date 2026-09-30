@@ -1,39 +1,924 @@
+import { segmentSphere } from './collision';
+import { SaveQueue } from './save-queue';
 import { ITEMS, NODES, MONSTERS, RECIPES, day, phase, type Recipe } from './data';
 import { addItem, capacity, count, craft, distance, height, normalizeSlots, makeEnemy, random, planNight, give, take, selected, stationFor, transactTransfer, uuid, biome, type State, type Building, type Stack, type Enemy } from './model';
 import { SaveManager, exportFile } from './storage';
-export type Target={kind:'node'|'enemy'|'building'|'drop';id:string;distance:number}|null;
+export type Target = {
+    kind: 'node' | 'enemy' | 'building' | 'drop';
+    id: string;
+    distance: number;
+} | null;
 export class Engine {
- state:State;storage:SaveManager;paused=true;panel:'pause'|'inventory'|'craft'|'map'|'facility'|'death'|'help'|null=null;facility:string|null=null;keys=new Set<string>();target:Target=null;notices:{id:number;text:string;until:number}[]=[];saveLabel='아직 저장하지 않음';savedAt=0;dirty=true;error='';onChange:()=>void=()=>{};onHit:()=>void=()=>{};onAttack:()=>void=()=>{};onSave:()=>void=()=>{};blocking=false;disposed=false;private saving:Promise<void>|null=null;private autosave=0;private uiTick=0;private lastStamina=0;private attackPressed=false;
- constructor(s:State,storage:SaveManager){this.state=s;this.storage=storage;this.panel=s.status==='alive'?'pause':'death';if(s.generation>0)this.saveLabel='저장본 복원 완료';this.storage.lockLost=()=>{this.pause('pause');this.error='월드 사용 권한이 변경되었습니다. 메뉴로 돌아가 다시 여세요.';this.notify(this.error)}}
- notify(text:string){this.notices.push({id:Date.now()+Math.random(),text,until:Date.now()+4200});this.notices=this.notices.slice(-4);this.onChange()}
- pause(panel:Engine['panel']='pause'){this.paused=true;this.panel=panel;this.keys.clear();this.blocking=false;if(typeof document!=='undefined'&&document.pointerLockElement)document.exitPointerLock();this.onChange()}
- resume(){if(this.state.status!=='alive')return;this.panel=null;this.paused=false;this.onChange()}
- bind(uid:string){const i=this.state.player.items.find(x=>x.uid===uid);if(!i)return;if(ITEMS[i.id].kind==='armor'&&i.id!=='bag'){this.state.player.armor=uid;this.notify(`${ITEMS[i.id].name} 착용`)}else{this.state.player.hotbar[this.state.player.selected]=uid;this.notify(`${this.state.player.selected+1}번 슬롯: ${ITEMS[i.id].name}`)}this.dirty=true;this.onChange()}
- useItem(uid?:string){const s=this.state,p=s.player,it=uid?p.items.find(i=>i.uid===uid):selected(s);if(!it)return;const d=ITEMS[it.id];if(d.kind==='food'){if(s.time-p.foodAt<2)return;p.foodAt=s.time;p.hunger=Math.min(100,p.hunger+(d.food||0));if((d.heal||0)<0)this.hurt(-d.heal!);else if(d.heal&&p.healLeft<5){p.healLeft=5;p.healRate=d.heal/5}if(it.id==='raw_meat'&&random(s)<.2){p.slow=Math.max(p.slow,10);this.notify('날고기를 먹고 탈이 났습니다.')}take(p.items,it.id,1);this.notify(`${d.name} 사용`)}else if(d.kind==='potion'){if(s.time-p.potionAt<15){this.notify('물약을 다시 사용할 때까지 기다리세요.');return}if(it.id==='heal'){p.hp=Math.min(100,p.hp+35)}if(it.id==='bandage'){if(s.time-p.hitAt<5){this.notify('안전한 곳에서 붕대를 사용하세요.');return}p.healLeft=6;p.healRate=20/6}if(it.id==='antidote')p.poison=0;if(it.id==='purify')p.curse=0;if(it.id==='pain'){s.projectiles.push({id:uuid(),x:p.x,y:height(p.x,p.z)+1.6,z:p.z,vx:-Math.sin(p.yaw)*14,vy:Math.sin(p.pitch)*14,vz:-Math.cos(p.yaw)*14,life:4,damage:0,enemy:false,type:'pain'})}take(p.items,it.id,1);p.potionAt=s.time;this.notify(`${d.name} 사용`)}normalizeSlots(s);this.dirty=true;this.onChange()}
- interact(){const s=this.state,t=this.target;if(!t||t.distance>3.5){const it=selected(s);if(it&&ITEMS[it.id].kind==='building')this.place(it);return}if(t.kind==='drop'){const d=s.drops.find(x=>x.id===t.id);if(!d)return;for(const it of [...d.items])transactTransfer(d.items,s.player.items,it.uid,capacity(s));if(!d.items.length)s.drops=s.drops.filter(x=>x!==d);else this.notify('가방이 가득 찼습니다.');normalizeSlots(s);this.dirty=true}else if(t.kind==='node'){this.gather()}else if(t.kind==='building'){const b=s.buildings.find(x=>x.id===t.id)!;if(b.kind.endsWith('_altar')){this.summon(b);return}if(b.kind==='heal_totem'){if(s.time<(b.cooldown||0)){this.notify('토템이 아직 회복 중입니다.');return}b.cooldown=s.time+720;s.player.healLeft=20;s.player.healRate=2;this.notify('치유 토템을 활성화했습니다.');this.dirty=true}else if(b.kind==='challenge_totem'){if(b.claimed){this.notify('이 토템의 보상은 이미 받았습니다.');return}if(s.enemies.some(e=>e.owner==='challenge')){this.notify('도전 중인 적을 처치하세요.');return}for(let k=0;k<3;k++){const foe=makeEnemy(s,k===2?'guard':'zombie',3,b.x+6+Math.sin(k)*2,b.z+Math.cos(k)*3);foe.owner='challenge';s.enemies.push(foe)}this.notify('토템 도전 시작 · 적 3마리를 처치하세요.');this.dirty=true}else if(b.kind==='bedroll'){s.player.bed=b.id;this.notify('이 침낭을 부활 지점으로 설정했습니다.');this.dirty=true}else if(b.kind==='plot'){if(b.crop&&s.time>=(b.grownAt||0)){const harvest=structuredClone(s.player.items);if(!give(harvest,b.crop,3,capacity(s))||!give(harvest,b.crop==='wheat'?'seed':'herb_seed',1,capacity(s))){this.notify('수확 공간을 확보하세요.');return}s.player.items=harvest;b.crop=undefined;this.notify('작물을 수확했습니다.')}else if(!b.crop){const seed=count(s.player.items,'seed')?'seed':count(s.player.items,'herb_seed')?'herb_seed':null;if(!seed){this.notify('밀 또는 약초 씨앗이 필요합니다.');return}take(s.player.items,seed,1);b.crop=seed==='seed'?'wheat':'herb';b.grownAt=s.time+1440;this.notify('씨앗을 심었습니다.')}else this.notify(`수확까지 ${Math.ceil(((b.grownAt||0)-s.time)/60)}분`);this.dirty=true}else if(b.kind==='trap'){if(s.time>=(b.grownAt||s.time+1)){if(!addItem(s,'raw_meat',1)){this.notify('회수 공간이 필요합니다.');return}b.grownAt=undefined;this.notify('덫에서 고기를 회수했습니다.')}else if(!b.grownAt&&take(s.player.items,'rotten',1)){b.grownAt=s.time+120;this.notify('덫에 미끼를 넣었습니다.')}else this.notify('썩은 고기 미끼가 필요하거나 포획을 기다려야 합니다.');this.dirty=true}else{this.facility=b.id;this.pause('facility')}}this.onChange()}
- gather(){const s=this.state,t=this.target;if(!t||t.kind!=='node'||t.distance>3.8||s.time-s.player.actionAt<.5)return;const n=s.nodes.find(n=>n.id===t.id);if(!n||n.depleted)return;const d=NODES[n.kind],it=selected(s),tool=it?ITEMS[it.id]:undefined;if(d.level>0&&(!tool||tool.tool!==d.tool||(tool.level||0)<d.level)){this.notify(`필요 도구: ${d.tool==='pick'?'곡괭이':'도끼'} 단계 ${d.level}`);return}if(it&&tool?.durability&&it.dur===0){this.notify('도구를 수리하세요.');return}if(n.hp<=((tool?.tool===d.tool)?3:1)){const items=structuredClone(s.player.items);if(!give(items,d.item,d.qty,capacity(s))){this.notify('인벤토리 공간이 부족합니다.');return}s.player.items=items;n.hp=0;n.depleted=true;n.readyAt=d.regen?s.time+d.regen:0;normalizeSlots(s);this.notify(`${ITEMS[d.item].name} +${d.qty}`);if(n.kind==='tree'&&random(s)<.5)addItem(s,'resin',1);if(n.kind==='wheat'||n.kind==='herb'){if(random(s)<.25)addItem(s,n.kind==='wheat'?'seed':'herb_seed',1)}}else{n.hp-=tool?.tool===d.tool?3:1}const current=it?s.player.items.find(x=>x.uid===it.uid):undefined;if(current?.dur!==undefined)current.dur=Math.max(0,current.dur-1);s.player.actionAt=s.time;this.onAttack();this.dirty=true}
- place(it:Stack){const s=this.state,p=s.player,x=p.x-Math.sin(p.yaw)*3,z=p.z-Math.cos(p.yaw)*3;if(Math.hypot(x,z)>465||s.buildings.some(b=>distance(b,{x,z})<2.2)||s.nodes.some(n=>!n.depleted&&['tree','hardtree','rock'].includes(n.kind)&&distance(n,{x,z})<1.5)){this.notify('다른 물체와 겹쳐 배치할 수 없습니다.');return}if(Math.abs(height(x+1,z)-height(x,z))>.4)return;const b:Building={id:uuid(),kind:it.id,x,z,yaw:p.yaw,hp:it.id==='wall'?250:200,items:[],jobs:[],fuel:0};s.buildings.push(b);take(p.items,it.id,1);if(it.id==='bedroll')p.bed=b.id;normalizeSlots(s);this.dirty=true;this.notify(`${ITEMS[it.id].name} 배치`)}
- craftRecipe(r:Recipe){const err=craft(this.state,r,this.panel==='facility'?this.facility||undefined:undefined);if(err)this.notify(err);else{this.dirty=true;this.notify(r.seconds?'작업 대기열에 추가했습니다.':`${ITEMS[r.output].name} 제작 완료`)}this.onChange()}
- transfer(uid:string,deposit:boolean){const b=this.state.buildings.find(b=>b.id===this.facility);if(!b)return;const ok=deposit?transactTransfer(this.state.player.items,b.items,uid,24):transactTransfer(b.items,this.state.player.items,uid,capacity(this.state));if(!ok)this.notify('보관 공간이 부족합니다.');normalizeSlots(this.state);this.dirty=true;this.onChange()}
- fuel(id:string){const b=this.state.buildings.find(b=>b.id===this.facility);if(b&&['wood','coal','charcoal'].includes(id)&&take(this.state.player.items,id,1)){b.fuel+=id==='coal'?40:id==='charcoal'?20:10;normalizeSlots(this.state);this.dirty=true;this.onChange()}}
- cancelJob(jobId:string){const b=this.state.buildings.find(b=>b.id===this.facility),j=b?.jobs.find(j=>j.id===jobId);if(!b||!j)return;const arr=structuredClone(this.state.player.items);for(const [id,n]of Object.entries(j.reserved))if(!give(arr,id,n,capacity(this.state))){this.notify('재료를 반환할 공간이 부족합니다.');return}this.state.player.items=arr;b.jobs=b.jobs.filter(x=>x!==j);this.dirty=true;this.onChange()}
- repair(uid:string){const s=this.state,it=s.player.items.find(i=>i.uid===uid);if(!it||it.dur===undefined)return;const d=ITEMS[it.id];const station=(d.level||0)>1?'anvil':'workbench';if(!stationFor(s,station)){this.notify(`${station==='anvil'?'모루':'제작대'}가 가까이 있어야 합니다.`);return}const material=it.id.startsWith('iron')?'iron':it.id.startsWith('steel')?'steel':it.id.startsWith('mithril')?'mithril':it.id.includes('obsidian')?'obsidian':d.tool?'stone':'wood';if(!take(s.player.items,material,1)){this.notify('수리 재료가 부족합니다.');return}it.dur=Math.min(d.durability!,it.dur+Math.ceil(d.durability!*.25));this.dirty=true;this.notify('장비를 수리했습니다.');this.onChange()}
- attack(){const s=this.state,p=s.player,it=selected(s),d=it?ITEMS[it.id]:null;if(s.time-p.actionAt<(d?.interval||.6))return;if(d?.kind==='food'||d?.kind==='potion'){this.useItem();return}if(d?.kind==='building'){this.place(it!);return}if(it?.id==='fishing_rod'){if(Math.hypot(p.x,p.z)<420){this.notify('해안 가까이에서 낚싯대를 사용하세요.');return}p.actionAt=s.time+7;if(random(s)<.7){addItem(s,'fish',1);this.notify('생선을 낚았습니다.')}else this.notify('물고기가 미끼를 피했습니다.');this.dirty=true;return}if(d?.durability&&it?.dur===0){this.notify('파손된 장비는 사용할 수 없습니다.');return}if(this.target?.kind==='node'){this.gather();return}p.actionAt=s.time;this.onAttack();if(it?.id.includes('bow')||it?.id.endsWith('_staff')){let type='arrow';if(it.id.endsWith('_staff')){if((it.charge||0)===0){if(!take(p.items,'magic_stone',1)){this.notify('마력석이 필요합니다.');return}it.charge=5}it.charge!--;type=it.id}else{type=['blast_arrow','poison_arrow','silver_arrow','arrow'].find(id=>count(p.items,id)>0)||'';if(!type){this.notify('화살이 필요합니다.');return}take(p.items,type,1)}const y=height(p.x,p.z)+p.y+1.6,sp=type==='arrow'||type.endsWith('arrow')?32:18;s.projectiles.push({id:uuid(),x:p.x,y,z:p.z,vx:-Math.sin(p.yaw)*Math.cos(p.pitch)*sp,vy:Math.sin(p.pitch)*sp,vz:-Math.cos(p.yaw)*Math.cos(p.pitch)*sp,life:6,damage:d?.damage||14,enemy:false,type})}else if(this.target?.kind==='enemy'&&this.target.distance<=(d?.range||2.2)+.4){const e=s.enemies.find(e=>e.id===this.target!.id);if(e)this.hitEnemy(e,d?.damage||5,it?.id||'hand')}if(it?.dur!==undefined)it.dur=Math.max(0,it.dur-1);normalizeSlots(s);this.dirty=true}
- hitEnemy(e:Enemy,damage:number,type:string){const s=this.state;if(e.hp<=0)return;if((e.vulnerable||0)>s.time)damage*=MONSTERS[e.kind].boss?1.1:1.2;if(e.kind.includes('golem')||e.kind==='rock_boss'){damage*=type.includes('pick')||type==='club'?.85:.65}if(e.kind==='guard'&&type!=='club')damage*=.75;if(type==='silver_arrow'&&['zombie','archer','guard','wizard'].includes(e.kind))damage*=1.25;if(type==='frost_staff')e.slow=3;if(type==='fire_staff'&&e.kind==='ember')damage*=.5;e.hp-=Math.round(damage);if(e.animal){e.timer=3;e.state='recover'}if(e.hp>0)return;
-s.enemies=s.enemies.filter(x=>x.id!==e.id);if(!e.animal&&!e.summon&&!MONSTERS[e.kind].boss)s.kills[e.kind]=Math.min(8,(s.kills[e.kind]||0)+1);if(!e.summon){const items:Stack[]=[];for(const [id,n]of Object.entries(e.loot))give(items,id,n,100);s.drops.push({id:`drop-${e.id}`,x:e.x,z:e.z,items,expires:s.time+600,bag:false})}if(e.kind.endsWith('_boss')){const q=e.kind.split('_')[0];if(!s.quests.includes(q)){s.quests.push(q);this.notify(e.kind==='night_boss'?'밤의 군주를 물리쳤습니다. 목표 달성!':'봉인 조각을 획득했습니다.');void this.save()}for(const b of s.buildings)if(b.kind===q+'_altar')b.claimed=true}if(e.owner==='challenge'&&!s.enemies.some(e=>e.owner==='challenge')){const b=s.buildings.find(b=>b.kind==='challenge_totem');if(b){b.claimed=true;const items:Stack[]=[];give(items,'iron',3,24);give(items,'golem_core',1,24);s.drops.push({id:uuid(),x:b.x,z:b.z,items,expires:s.time+600,bag:false});this.notify('도전 완료 · 토템 옆에서 보상을 회수하세요.');void this.save()}}this.dirty=true;this.notify(`${MONSTERS[e.kind].name} 처치`)}
- hurt(damage:number,direct=true){const s=this.state,p=s.player;if(s.status!=='alive'||(direct&&(s.time-p.hitAt<.25||s.time<p.dodgeUntil)))return;const armor=p.items.find(i=>i.uid===p.armor),def=armor&&armor.dur!==0?ITEMS[armor.id].armor||0:0;let result=direct?damage*100/(100+def)*(p.curse>0?1.2:1):damage;if(direct&&this.blocking&&p.items.some(i=>i.id==='shield'&&(i.dur||0)>0)){if(p.stamina>=12){p.stamina-=12;result*=.3;const shield=p.items.find(i=>i.id==='shield')!;shield.dur=Math.max(0,(shield.dur||0)-1)}else p.stamina=0}p.hp=Math.max(0,p.hp-Math.round(result));if(direct){p.hitAt=s.time;p.healLeft=0;this.onHit()}if(p.hp<=0){s.status=s.mode==='permadeath'?'ended':'dead';if(s.mode==='normal'){s.drops.push({id:uuid(),x:p.x,z:p.z,items:p.items.filter(i=>i.uid!==p.armor),expires:0,bag:true});p.items=p.items.filter(i=>i.uid===p.armor);normalizeSlots(s)}this.pause('death');void this.save()}this.dirty=true}
- respawn(){const s=this.state;if(s.mode==='permadeath')return;const bed=s.buildings.find(b=>b.id===s.player.bed);Object.assign(s.player,{x:bed?.x||0,z:(bed?.z||8)+2,y:0,vy:0,hp:50,hunger:50,stamina:100,poison:0,curse:0,slow:0,healLeft:0,dodgeUntil:s.time+5});s.enemies=s.enemies.filter(e=>!MONSTERS[e.kind].boss);s.status='alive';this.panel='pause';void this.save();this.notify('사망 가방을 지도에서 찾을 수 있습니다.')}
- summon(b:Building){const s=this.state,kind=b.kind==='forest_altar'?'forest_boss':b.kind==='rock_altar'?'rock_boss':b.kind==='ruin_altar'?'ruin_boss':'night_boss';if(s.enemies.some(e=>MONSTERS[e.kind].boss)){this.notify('이미 수호자와 전투 중입니다.');return}if(kind==='night_boss'&&!['forest','rock','ruin'].every(q=>s.quests.includes(q))){this.notify('서로 다른 봉인 조각 3개가 필요합니다.');return}s.enemies.push(makeEnemy(s,kind,1,b.x+6,b.z));this.notify(`${MONSTERS[kind].name} 등장!`);this.dirty=true;void this.save()}
- step(dt:number){if(this.paused||this.state.status!=='alive'||this.disposed)return;const s=this.state,p=s.player,oldPhase=phase(s.time),oldDay=day(s.time);s.time+=dt;s.tick++;this.dirty=true;if(day(s.time)!==oldDay){s.previousKills=Object.values(s.kills).reduce((a,b)=>a+b,0);s.kills={};s.enemies=s.enemies.filter(e=>e.animal||MONSTERS[e.kind].boss||e.night===0);s.nightPlan=[];this.notify(`Day ${day(s.time)} · 아침이 밝았습니다.`);for(let i=0;i<3;i++)if(s.enemies.filter(e=>e.animal).length<10){const a=random(s)*Math.PI*2;s.enemies.push(makeEnemy(s,i%2?'cow':'sheep',1,p.x+Math.cos(a)*35,p.z+Math.sin(a)*35,true))}}if(phase(s.time)!==oldPhase){if(phase(s.time)==='밤'){planNight(s);this.notify(s.blood?'핏빛 달이 떴습니다.':'밤이 시작되었습니다.')}void this.save()}
-if(phase(s.time)==='밤'){const elapsed=s.time%720-510;const wave=Math.floor(elapsed/60)+1;if(wave>s.nightWave&&s.enemies.filter(e=>!e.animal).length<20){const amount=Math.ceil(s.nightPlan.length/(4-wave));for(let i=0;i<amount&&s.enemies.length<40;i++){const e=s.nightPlan.shift();if(!e)break;let placed=false;for(let tries=0;tries<12;tries++){const a=random(s)*Math.PI*2,r=25+random(s)*20,x=p.x+Math.cos(a)*r,z=p.z+Math.sin(a)*r;if(Math.hypot(x,z)<462&&!s.buildings.some(b=>distance(b,{x,z})<6)){e.x=x;e.z=z;s.enemies.push(e);placed=true;break}}if(!placed)s.nightPlan.unshift(e)}s.nightWave=wave}}
-let ix=(this.keys.has('KeyD')?1:0)-(this.keys.has('KeyA')?1:0),iz=(this.keys.has('KeyW')?1:0)-(this.keys.has('KeyS')?1:0);const norm=Math.hypot(ix,iz);if(norm){ix/=norm;iz/=norm;const run=this.keys.has('ShiftLeft')&&p.stamina>1;let speed=run?6.5:4;if(p.slow>0)speed*=.75;if(run){p.stamina=Math.max(0,p.stamina-12*dt);this.lastStamina=s.time}const nx=p.x+(Math.cos(p.yaw)*ix-Math.sin(p.yaw)*iz)*speed*dt,nz=p.z+(-Math.sin(p.yaw)*ix-Math.cos(p.yaw)*iz)*speed*dt;const blocked=(x:number,z:number)=>Math.hypot(x,z)>465||s.nodes.some(n=>!n.depleted&&['tree','hardtree','rock','iron'].includes(n.kind)&&distance(n,{x,z})<.9)||s.buildings.some(b=>['wall','chest','furnace','advanced_furnace','anvil'].includes(b.kind)&&distance(b,{x,z})<1);if(!blocked(nx,p.z))p.x=nx;if(!blocked(p.x,nz))p.z=nz}if(this.keys.has('Space')&&p.y===0)p.vy=5;p.y+=p.vy*dt;p.vy-=15*dt;if(p.y<0){p.y=0;p.vy=0}if(this.keys.has('ControlLeft')&&p.stamina>=25&&s.time>p.dodgeUntil+.8){p.stamina-=25;p.dodgeUntil=s.time+.15;this.lastStamina=s.time;const dx=p.x-Math.sin(p.yaw)*1.3,dz=p.z-Math.cos(p.yaw)*1.3;if(Math.hypot(dx,dz)<465&&!s.buildings.some(b=>['wall','door','chest'].includes(b.kind)&&distance(b,{x:dx,z:dz})<1.2)){p.x=dx;p.z=dz}}if(s.time-this.lastStamina>1)p.stamina=Math.min(100,p.stamina+(p.hunger<20?10:20)*dt);p.hunger=Math.max(0,p.hunger-dt/8);if(p.hunger===0&&s.tick%150===0)this.hurt(1,false);if(p.poison>0){p.poison=Math.max(0,p.poison-dt);if(s.tick%30===0)this.hurt(2,false)}p.curse=Math.max(0,p.curse-dt);p.slow=Math.max(0,p.slow-dt);if(p.healLeft>0){p.healLeft-=dt;p.hp=Math.min(100,p.hp+p.healRate*dt)}const region=biome(p.x,p.z);if(!s.discovered.includes(region)){s.discovered.push(region);this.notify(`${region} 발견`)}
-for(const n of s.nodes)if(n.depleted&&n.readyAt>0&&s.time>=n.readyAt&&!s.buildings.some(b=>distance(b,n)<2)){n.depleted=false;n.hp=NODES[n.kind].hp}
-for(const b of s.buildings){const j=b.jobs[0];if(!j)continue;const r=RECIPES.find(r=>r.id===j.recipe)!;if(j.remaining>0&&b.fuel>0){const work=Math.min(dt,b.fuel,j.remaining);b.fuel-=work;j.remaining-=work}if(j.remaining<=0&&give(b.items,r.output,r.qty,24))b.jobs.shift()}
-for(const e of [...s.enemies]){if(e.hp<=0)continue;const d=MONSTERS[e.kind],dist=distance(e,p);if(dist>130)continue;if(e.summon&&e.owner&&!s.enemies.some(x=>x.id===e.owner)){s.enemies=s.enemies.filter(x=>x!==e);continue}e.slow=Math.max(0,e.slow-dt);e.skill-=dt;if(e.animal){e.timer-=dt;const a=e.timer>0?Math.atan2(e.z-p.z,e.x-p.x):s.time*.12+parseInt(e.id.slice(0,2),16);const speed=e.timer>0?d.speed*1.8:d.speed*.15;e.x+=Math.cos(a)*speed*dt;e.z+=Math.sin(a)*speed*dt;continue}if(d.boss&&dist>60){s.enemies=s.enemies.filter(x=>x!==e);this.notify('수호자 전투 지역을 벗어났습니다.');continue}if(e.state==='windup'){e.timer-=dt;if(e.timer<=0){if(d.role!=='melee'&&dist<25){const dx=p.x-e.x,dz=p.z-e.z,l=Math.hypot(dx,dz);s.projectiles.push({id:uuid(),x:e.x,y:height(e.x,e.z)+1.3,z:e.z,vx:dx/l*10,vy:0,vz:dz/l*10,life:5,damage:d.damage*(1+.1*(e.tier-d.min)),enemy:true,type:e.kind})}else if(dist<2.8){this.hurt(d.damage*(1+.1*(e.tier-d.min))*(s.difficulty==='easy'?.8:s.difficulty==='hard'?1.2:1));if(e.kind==='spider')p.poison=5}e.state='recover';e.timer=d.boss?1.3:1}}else if(e.state==='recover'){e.timer-=dt;if(e.timer<=0)e.state='chase'}else{const reach=d.role==='melee'?2:14;if(dist>reach){const speed=d.speed*(e.slow>0?.75:1);const nx=e.x+(p.x-e.x)/dist*speed*dt,nz=e.z+(p.z-e.z)/dist*speed*dt;const wall=s.buildings.find(b=>['wall','door'].includes(b.kind)&&distance(b,{x:nx,z:nz})<1.1);if(wall){wall.hp-=d.damage*dt*.3;if(wall.hp<=0)this.breakBuilding(wall)}else{e.x=nx;e.z=nz}}else{e.state='windup';e.timer=d.boss?1.1:d.role==='melee'?.6:.8}}if(e.kind==='wizard'&&e.skill<=0&&dist<22&&s.enemies.filter(x=>x.owner===e.id).length<3&&s.enemies.length<40){const n=makeEnemy(s,'zombie',Math.min(5,e.tier),e.x+2,e.z,false,true);n.owner=e.id;s.enemies.push(n);e.skill=15}}
-for(const q of [...s.projectiles]){const prev={x:q.x,y:q.y,z:q.z};q.life-=dt;q.x+=q.vx*dt;q.y+=q.vy*dt;q.z+=q.vz*dt;if(q.type.includes('arrow'))q.vy-=7*dt;let hit=false;const nearSegment=(x:number,y:number,z:number)=>{const dx=q.x-prev.x,dy=q.y-prev.y,dz=q.z-prev.z,len=dx*dx+dy*dy+dz*dz,t=len?Math.max(0,Math.min(1,((x-prev.x)*dx+(y-prev.y)*dy+(z-prev.z)*dz)/len)):0;return Math.hypot(x-prev.x-dx*t,y-prev.y-dy*t,z-prev.z-dz*t)};if(q.enemy){if(nearSegment(p.x,height(p.x,p.z)+p.y+1,p.z)<.75){this.hurt(q.damage);if(q.type==='frost')p.slow=3;if(q.type==='wizard')p.curse=8;hit=true}}else{for(const e of [...s.enemies])if(nearSegment(e.x,height(e.x,e.z)+1,e.z)<.9){if(q.type==='pain')e.vulnerable=s.time+8;else this.hitEnemy(e,q.damage+(q.type==='poison_arrow'?10:0),q.type);if(q.type==='blast_arrow')for(const a of [...s.enemies])if(a!==e&&distance(a,e)<3)this.hitEnemy(a,q.damage*.7,q.type);hit=true;break}}if(s.buildings.some(b=>['wall','door'].includes(b.kind)&&nearSegment(b.x,height(b.x,b.z)+1,b.z)<1))hit=true;if(q.y<height(q.x,q.z)||q.life<=0||Math.hypot(q.x,q.z)>490||hit)s.projectiles=s.projectiles.filter(p=>p!==q)}
-s.drops=s.drops.filter(d=>d.bag||s.time<d.expires);if(this.keys.has('MouseLeft'))this.attack();this.autosave+=dt;if(this.autosave>=30){this.autosave=0;void this.save()}this.uiTick+=dt;if(this.uiTick>.12){this.uiTick=0;this.onChange()}}
- breakBuilding(b:Building){const s=this.state,items=structuredClone(b.items);for(const j of b.jobs)for(const [id,n]of Object.entries(j.reserved))give(items,id,n,100);if(items.length)s.drops.push({id:uuid(),x:b.x,z:b.z,items,expires:0,bag:true});s.buildings=s.buildings.filter(x=>x!==b);this.dirty=true}
- async save():Promise<void>{if(this.saving){await this.saving;if(this.dirty&&!this.disposed)return this.save();return}this.saveLabel='저장 중…';this.onChange();this.dirty=false;this.saving=(async()=>{try{this.savedAt=await this.storage.save(this.state);this.saveLabel=`저장됨 · ${new Date(this.savedAt).toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit',second:'2-digit'})}`;this.error=''}catch(e){this.dirty=true;this.error=e instanceof Error?e.message:'저장 실패';this.saveLabel='저장 실패 · 파일 백업을 이용하세요';this.notify(this.error)}finally{this.onChange()}})();await this.saving;this.saving=null}
- async export(){try{await exportFile(this.state);this.notify('백업 파일 다운로드를 요청했습니다.')}catch(e){this.notify(String(e))}}
- dispose(){this.disposed=true;this.keys.clear();this.storage.lockLost=()=>{}}
+    state: State;
+    storage: SaveManager;
+    paused = true;
+    panel: 'pause' | 'inventory' | 'craft' | 'map' | 'facility' | 'death' | 'help' | null = null;
+    facility: string | null = null;
+    keys = new Set<string>();
+    target: Target = null;
+    notices: {
+        id: number;
+        text: string;
+        until: number;
+    }[] = [];
+    saveLabel = '아직 저장하지 않음';
+    savedAt = 0;
+    dirty = true;
+    error = '';
+    onChange: () => void = () => {
+    };
+    onHit: () => void = () => {
+    };
+    onAttack: () => void = () => {
+    };
+    onSave: () => void = () => {
+    };
+    blocking = false;
+    disposed = false;
+    private saveQueue = new SaveQueue();
+    private autosave = 0;
+    private uiTick = 0;
+    private lastStamina = 0;
+    private attackPressed = false;
+    constructor(s: State, storage: SaveManager) {
+        this.state = s;
+        this.storage = storage;
+        this.panel = s.status === 'alive' ? 'pause' : 'death';
+        if (s.generation > 0)
+            this.saveLabel = '저장본 복원 완료';
+        this.storage.lockLost = () => {
+            this.pause('pause');
+            this.error = '월드 사용 권한이 변경되었습니다. 메뉴로 돌아가 다시 여세요.';
+            this.notify(this.error);
+        };
+    }
+    notify(text: string) {
+        this.notices.push({ id: Date.now() + Math.random(), text, until: Date.now() + 4200 });
+        this.notices = this.notices.slice(-4);
+        this.onChange();
+    }
+    pause(panel: Engine['panel'] = 'pause') {
+        this.paused = true;
+        this.panel = panel;
+        this.keys.clear();
+        this.blocking = false;
+        if (typeof document !== 'undefined' && document.pointerLockElement)
+            document.exitPointerLock();
+        this.onChange();
+    }
+    resume() {
+        if (this.state.status !== 'alive')
+            return;
+        this.panel = null;
+        this.paused = false;
+        this.onChange();
+    }
+    bind(uid: string) {
+        const i = this.state.player.items.find(x => x.uid === uid);
+        if (!i)
+            return;
+        if (ITEMS[i.id].kind === 'armor' && i.id !== 'bag') {
+            this.state.player.armor = uid;
+            this.notify(`${ITEMS[i.id].name} 착용`);
+        }
+        else {
+            this.state.player.hotbar[this.state.player.selected] = uid;
+            this.notify(`${this.state.player.selected + 1}번 슬롯: ${ITEMS[i.id].name}`);
+        }
+        this.dirty = true;
+        this.onChange();
+    }
+    useItem(uid?: string) {
+        const s = this.state, p = s.player, it = uid ? p.items.find(i => i.uid === uid) : selected(s);
+        if (!it)
+            return;
+        const d = ITEMS[it.id];
+        if (d.kind === 'food') {
+            if (s.time - p.foodAt < 2)
+                return;
+            p.foodAt = s.time;
+            p.hunger = Math.min(100, p.hunger + (d.food || 0));
+            if ((d.heal || 0) < 0)
+                this.hurt(-d.heal!);
+            else if (d.heal && p.healLeft < 5) {
+                p.healLeft = 5;
+                p.healRate = d.heal / 5;
+            }
+            if (it.id === 'raw_meat' && random(s) < .2) {
+                p.slow = Math.max(p.slow, 10);
+                this.notify('날고기를 먹고 탈이 났습니다.');
+            }
+            take(p.items, it.id, 1);
+            this.notify(`${d.name} 사용`);
+        }
+        else if (d.kind === 'potion') {
+            if (s.time - p.potionAt < 15) {
+                this.notify('물약을 다시 사용할 때까지 기다리세요.');
+                return;
+            }
+            if (it.id === 'heal') {
+                p.hp = Math.min(100, p.hp + 35);
+            }
+            if (it.id === 'bandage') {
+                if (s.time - p.hitAt < 5) {
+                    this.notify('안전한 곳에서 붕대를 사용하세요.');
+                    return;
+                }
+                p.healLeft = 6;
+                p.healRate = 20 / 6;
+            }
+            if (it.id === 'antidote')
+                p.poison = 0;
+            if (it.id === 'purify')
+                p.curse = 0;
+            if (it.id === 'pain') {
+                s.projectiles.push({ id: uuid(), x: p.x, y: height(p.x, p.z) + 1.6, z: p.z, vx: -Math.sin(p.yaw) * 14, vy: Math.sin(p.pitch) * 14, vz: -Math.cos(p.yaw) * 14, life: 4, damage: 0, enemy: false, type: 'pain' });
+            }
+            take(p.items, it.id, 1);
+            p.potionAt = s.time;
+            this.notify(`${d.name} 사용`);
+        }
+        normalizeSlots(s);
+        this.dirty = true;
+        this.onChange();
+    }
+    interact() {
+        const s = this.state, t = this.target;
+        if (!t || t.distance > 3.5) {
+            const it = selected(s);
+            if (it && ITEMS[it.id].kind === 'building')
+                this.place(it);
+            return;
+        }
+        if (t.kind === 'drop') {
+            const d = s.drops.find(x => x.id === t.id);
+            if (!d)
+                return;
+            for (const it of [...d.items])
+                transactTransfer(d.items, s.player.items, it.uid, capacity(s));
+            if (!d.items.length)
+                s.drops = s.drops.filter(x => x !== d);
+            else
+                this.notify('가방이 가득 찼습니다.');
+            normalizeSlots(s);
+            this.dirty = true;
+        }
+        else if (t.kind === 'node') {
+            this.gather();
+        }
+        else if (t.kind === 'building') {
+            const b = s.buildings.find(x => x.id === t.id)!;
+            if (b.kind.endsWith('_altar')) {
+                this.summon(b);
+                return;
+            }
+            if (b.kind === 'heal_totem') {
+                if (s.time < (b.cooldown || 0)) {
+                    this.notify('토템이 아직 회복 중입니다.');
+                    return;
+                }
+                b.cooldown = s.time + 720;
+                s.player.healLeft = 20;
+                s.player.healRate = 2;
+                this.notify('치유 토템을 활성화했습니다.');
+                this.dirty = true;
+            }
+            else if (b.kind === 'challenge_totem') {
+                if (b.claimed) {
+                    this.notify('이 토템의 보상은 이미 받았습니다.');
+                    return;
+                }
+                if (s.enemies.some(e => e.owner === 'challenge')) {
+                    this.notify('도전 중인 적을 처치하세요.');
+                    return;
+                }
+                for (let k = 0; k < 3; k++) {
+                    const foe = makeEnemy(s, k === 2 ? 'guard' : 'zombie', 3, b.x + 6 + Math.sin(k) * 2, b.z + Math.cos(k) * 3);
+                    foe.owner = 'challenge';
+                    s.enemies.push(foe);
+                }
+                this.notify('토템 도전 시작 · 적 3마리를 처치하세요.');
+                this.dirty = true;
+            }
+            else if (b.kind === 'bedroll') {
+                s.player.bed = b.id;
+                this.notify('이 침낭을 부활 지점으로 설정했습니다.');
+                this.dirty = true;
+            }
+            else if (b.kind === 'plot') {
+                if (b.crop && s.time >= (b.grownAt || 0)) {
+                    const harvest = structuredClone(s.player.items);
+                    if (!give(harvest, b.crop, 3, capacity(s)) || !give(harvest, b.crop === 'wheat' ? 'seed' : 'herb_seed', 1, capacity(s))) {
+                        this.notify('수확 공간을 확보하세요.');
+                        return;
+                    }
+                    s.player.items = harvest;
+                    b.crop = undefined;
+                    this.notify('작물을 수확했습니다.');
+                }
+                else if (!b.crop) {
+                    const seed = count(s.player.items, 'seed') ? 'seed' : count(s.player.items, 'herb_seed') ? 'herb_seed' : null;
+                    if (!seed) {
+                        this.notify('밀 또는 약초 씨앗이 필요합니다.');
+                        return;
+                    }
+                    take(s.player.items, seed, 1);
+                    b.crop = seed === 'seed' ? 'wheat' : 'herb';
+                    b.grownAt = s.time + 1440;
+                    this.notify('씨앗을 심었습니다.');
+                }
+                else
+                    this.notify(`수확까지 ${Math.ceil(((b.grownAt || 0) - s.time) / 60)}분`);
+                this.dirty = true;
+            }
+            else if (b.kind === 'trap') {
+                if (s.time >= (b.grownAt || s.time + 1)) {
+                    if (!addItem(s, 'raw_meat', 1)) {
+                        this.notify('회수 공간이 필요합니다.');
+                        return;
+                    }
+                    b.grownAt = undefined;
+                    this.notify('덫에서 고기를 회수했습니다.');
+                }
+                else if (!b.grownAt && take(s.player.items, 'rotten', 1)) {
+                    b.grownAt = s.time + 120;
+                    this.notify('덫에 미끼를 넣었습니다.');
+                }
+                else
+                    this.notify('썩은 고기 미끼가 필요하거나 포획을 기다려야 합니다.');
+                this.dirty = true;
+            }
+            else {
+                this.facility = b.id;
+                this.pause('facility');
+            }
+        }
+        this.onChange();
+    }
+    gather() {
+        const s = this.state, t = this.target;
+        if (!t || t.kind !== 'node' || t.distance > 3.8 || s.time - s.player.actionAt < .5)
+            return;
+        const n = s.nodes.find(n => n.id === t.id);
+        if (!n || n.depleted)
+            return;
+        const d = NODES[n.kind], it = selected(s), tool = it ? ITEMS[it.id] : undefined;
+        if (d.level > 0 && (!tool || tool.tool !== d.tool || (tool.level || 0) < d.level)) {
+            this.notify(`필요 도구: ${d.tool === 'pick' ? '곡괭이' : '도끼'} 단계 ${d.level}`);
+            return;
+        }
+        if (it && tool?.durability && it.dur === 0) {
+            this.notify('도구를 수리하세요.');
+            return;
+        }
+        if (n.hp <= ((tool?.tool === d.tool) ? 3 : 1)) {
+            const items = structuredClone(s.player.items);
+            if (!give(items, d.item, d.qty, capacity(s))) {
+                this.notify('인벤토리 공간이 부족합니다.');
+                return;
+            }
+            s.player.items = items;
+            n.hp = 0;
+            n.depleted = true;
+            n.readyAt = d.regen ? s.time + d.regen : 0;
+            normalizeSlots(s);
+            this.notify(`${ITEMS[d.item].name} +${d.qty}`);
+            if (n.kind === 'tree' && random(s) < .5)
+                addItem(s, 'resin', 1);
+            if (n.kind === 'wheat' || n.kind === 'herb') {
+                if (random(s) < .25)
+                    addItem(s, n.kind === 'wheat' ? 'seed' : 'herb_seed', 1);
+            }
+        }
+        else {
+            n.hp -= tool?.tool === d.tool ? 3 : 1;
+        }
+        const current = it ? s.player.items.find(x => x.uid === it.uid) : undefined;
+        if (current?.dur !== undefined)
+            current.dur = Math.max(0, current.dur - 1);
+        s.player.actionAt = s.time;
+        this.onAttack();
+        this.dirty = true;
+    }
+    place(it: Stack) {
+        const s = this.state, p = s.player, x = p.x - Math.sin(p.yaw) * 3, z = p.z - Math.cos(p.yaw) * 3;
+        if (Math.hypot(x, z) > 465 || s.buildings.some(b => distance(b, { x, z }) < 2.2) || s.nodes.some(n => !n.depleted && ['tree', 'hardtree', 'rock'].includes(n.kind) && distance(n, { x, z }) < 1.5)) {
+            this.notify('다른 물체와 겹쳐 배치할 수 없습니다.');
+            return;
+        }
+        if (Math.abs(height(x + 1, z) - height(x, z)) > .4)
+            return;
+        const b: Building = { id: uuid(), kind: it.id, x, z, yaw: p.yaw, hp: it.id === 'wall' ? 250 : 200, items: [], jobs: [], fuel: 0 };
+        s.buildings.push(b);
+        take(p.items, it.id, 1);
+        if (it.id === 'bedroll')
+            p.bed = b.id;
+        normalizeSlots(s);
+        this.dirty = true;
+        this.notify(`${ITEMS[it.id].name} 배치`);
+    }
+    craftRecipe(r: Recipe) {
+        const err = craft(this.state, r, this.panel === 'facility' ? this.facility || undefined : undefined);
+        if (err)
+            this.notify(err);
+        else {
+            this.dirty = true;
+            this.notify(r.seconds ? '작업 대기열에 추가했습니다.' : `${ITEMS[r.output].name} 제작 완료`);
+        }
+        this.onChange();
+    }
+    transfer(uid: string, deposit: boolean) {
+        const b = this.state.buildings.find(b => b.id === this.facility);
+        if (!b)
+            return;
+        const ok = deposit ? transactTransfer(this.state.player.items, b.items, uid, 24) : transactTransfer(b.items, this.state.player.items, uid, capacity(this.state));
+        if (!ok)
+            this.notify('보관 공간이 부족합니다.');
+        normalizeSlots(this.state);
+        this.dirty = true;
+        this.onChange();
+    }
+    fuel(id: string) {
+        const b = this.state.buildings.find(b => b.id === this.facility);
+        if (b && ['wood', 'coal', 'charcoal'].includes(id) && take(this.state.player.items, id, 1)) {
+            b.fuel += id === 'coal' ? 40 : id === 'charcoal' ? 20 : 10;
+            normalizeSlots(this.state);
+            this.dirty = true;
+            this.onChange();
+        }
+    }
+    cancelJob(jobId: string) {
+        const b = this.state.buildings.find(b => b.id === this.facility), j = b?.jobs.find(j => j.id === jobId);
+        if (!b || !j)
+            return;
+        const arr = structuredClone(this.state.player.items);
+        for (const [id, n] of Object.entries(j.reserved))
+            if (!give(arr, id, n, capacity(this.state))) {
+                this.notify('재료를 반환할 공간이 부족합니다.');
+                return;
+            }
+        this.state.player.items = arr;
+        b.jobs = b.jobs.filter(x => x !== j);
+        this.dirty = true;
+        this.onChange();
+    }
+    repair(uid: string) {
+        const s = this.state, it = s.player.items.find(i => i.uid === uid);
+        if (!it || it.dur === undefined)
+            return;
+        const d = ITEMS[it.id];
+        const station = (d.level || 0) > 1 ? 'anvil' : 'workbench';
+        if (!stationFor(s, station)) {
+            this.notify(`${station === 'anvil' ? '모루' : '제작대'}가 가까이 있어야 합니다.`);
+            return;
+        }
+        const material = it.id.startsWith('iron') ? 'iron' : it.id.startsWith('steel') ? 'steel' : it.id.startsWith('mithril') ? 'mithril' : it.id.includes('obsidian') ? 'obsidian' : d.tool ? 'stone' : 'wood';
+        if (!take(s.player.items, material, 1)) {
+            this.notify('수리 재료가 부족합니다.');
+            return;
+        }
+        it.dur = Math.min(d.durability!, it.dur + Math.ceil(d.durability! * .25));
+        this.dirty = true;
+        this.notify('장비를 수리했습니다.');
+        this.onChange();
+    }
+    attack() {
+        const s = this.state, p = s.player, it = selected(s), d = it ? ITEMS[it.id] : null;
+        if (s.time - p.actionAt < (d?.interval || .6))
+            return;
+        if (d?.kind === 'food' || d?.kind === 'potion') {
+            this.useItem();
+            return;
+        }
+        if (d?.kind === 'building') {
+            this.place(it!);
+            return;
+        }
+        if (it?.id === 'fishing_rod') {
+            if (Math.hypot(p.x, p.z) < 420) {
+                this.notify('해안 가까이에서 낚싯대를 사용하세요.');
+                return;
+            }
+            p.actionAt = s.time + 7;
+            if (random(s) < .7) {
+                addItem(s, 'fish', 1);
+                this.notify('생선을 낚았습니다.');
+            }
+            else
+                this.notify('물고기가 미끼를 피했습니다.');
+            this.dirty = true;
+            return;
+        }
+        if (d?.durability && it?.dur === 0) {
+            this.notify('파손된 장비는 사용할 수 없습니다.');
+            return;
+        }
+        if (this.target?.kind === 'node') {
+            this.gather();
+            return;
+        }
+        p.actionAt = s.time;
+        this.onAttack();
+        if (it?.id.includes('bow') || it?.id.endsWith('_staff')) {
+            let type = 'arrow';
+            if (it.id.endsWith('_staff')) {
+                if ((it.charge || 0) === 0) {
+                    if (!take(p.items, 'magic_stone', 1)) {
+                        this.notify('마력석이 필요합니다.');
+                        return;
+                    }
+                    it.charge = 5;
+                }
+                it.charge!--;
+                type = it.id;
+            }
+            else {
+                type = ['blast_arrow', 'poison_arrow', 'silver_arrow', 'arrow'].find(id => count(p.items, id) > 0) || '';
+                if (!type) {
+                    this.notify('화살이 필요합니다.');
+                    return;
+                }
+                take(p.items, type, 1);
+            }
+            const y = height(p.x, p.z) + p.y + 1.6, sp = type === 'arrow' || type.endsWith('arrow') ? 32 : 18;
+            s.projectiles.push({ id: uuid(), x: p.x, y, z: p.z, vx: -Math.sin(p.yaw) * Math.cos(p.pitch) * sp, vy: Math.sin(p.pitch) * sp, vz: -Math.cos(p.yaw) * Math.cos(p.pitch) * sp, life: 6, damage: d?.damage || 14, enemy: false, type });
+        }
+        else if (this.target?.kind === 'enemy' && this.target.distance <= (d?.range || 2.2) + .4) {
+            const e = s.enemies.find(e => e.id === this.target!.id);
+            if (e)
+                this.hitEnemy(e, d?.damage || 5, it?.id || 'hand');
+        }
+        if (it?.dur !== undefined)
+            it.dur = Math.max(0, it.dur - 1);
+        normalizeSlots(s);
+        this.dirty = true;
+    }
+    hitEnemy(e: Enemy, damage: number, type: string) {
+        const s = this.state;
+        if (e.hp <= 0)
+            return;
+        if ((e.vulnerable || 0) > s.time)
+            damage *= MONSTERS[e.kind].boss ? 1.1 : 1.2;
+        if (e.kind.includes('golem') || e.kind === 'rock_boss') {
+            damage *= type.includes('pick') || type === 'club' ? .85 : .65;
+        }
+        if (e.kind === 'guard' && type !== 'club')
+            damage *= .75;
+        if (type === 'silver_arrow' && ['zombie', 'archer', 'guard', 'wizard'].includes(e.kind))
+            damage *= 1.25;
+        if (type === 'frost_staff')
+            e.slow = 3;
+        if (type === 'fire_staff' && e.kind === 'ember')
+            damage *= .5;
+        e.hp -= Math.round(damage);
+        if (e.animal) {
+            e.timer = 3;
+            e.state = 'recover';
+        }
+        if (e.hp > 0)
+            return;
+        s.enemies = s.enemies.filter(x => x.id !== e.id);
+        if (!e.animal && !e.summon && !MONSTERS[e.kind].boss)
+            s.kills[e.kind] = Math.min(8, (s.kills[e.kind] || 0) + 1);
+        if (!e.summon) {
+            const items: Stack[] = [];
+            for (const [id, n] of Object.entries(e.loot))
+                give(items, id, n, 100);
+            s.drops.push({ id: `drop-${e.id}`, x: e.x, z: e.z, items, expires: s.time + 600, bag: false });
+        }
+        if (e.kind.endsWith('_boss')) {
+            const q = e.kind.split('_')[0];
+            if (!s.quests.includes(q)) {
+                s.quests.push(q);
+                this.notify(e.kind === 'night_boss' ? '밤의 군주를 물리쳤습니다. 목표 달성!' : '봉인 조각을 획득했습니다.');
+                void this.save();
+            }
+            for (const b of s.buildings)
+                if (b.kind === q + '_altar')
+                    b.claimed = true;
+        }
+        if (e.owner === 'challenge' && !s.enemies.some(e => e.owner === 'challenge')) {
+            const b = s.buildings.find(b => b.kind === 'challenge_totem');
+            if (b) {
+                b.claimed = true;
+                const items: Stack[] = [];
+                give(items, 'iron', 3, 24);
+                give(items, 'golem_core', 1, 24);
+                s.drops.push({ id: uuid(), x: b.x, z: b.z, items, expires: s.time + 600, bag: false });
+                this.notify('도전 완료 · 토템 옆에서 보상을 회수하세요.');
+                void this.save();
+            }
+        }
+        this.dirty = true;
+        this.notify(`${MONSTERS[e.kind].name} 처치`);
+    }
+    hurt(damage: number, direct = true) {
+        const s = this.state, p = s.player;
+        if (s.status !== 'alive' || (direct && (s.time - p.hitAt < .25 || s.time < p.dodgeUntil)))
+            return;
+        const armor = p.items.find(i => i.uid === p.armor), def = armor && armor.dur !== 0 ? ITEMS[armor.id].armor || 0 : 0;
+        let result = direct ? damage * 100 / (100 + def) * (p.curse > 0 ? 1.2 : 1) : damage;
+        if (direct && this.blocking && p.items.some(i => i.id === 'shield' && (i.dur || 0) > 0)) {
+            if (p.stamina >= 12) {
+                p.stamina -= 12;
+                result *= .3;
+                const shield = p.items.find(i => i.id === 'shield')!;
+                shield.dur = Math.max(0, (shield.dur || 0) - 1);
+            }
+            else
+                p.stamina = 0;
+        }
+        p.hp = Math.max(0, p.hp - Math.round(result));
+        if (direct) {
+            p.hitAt = s.time;
+            p.healLeft = 0;
+            this.onHit();
+        }
+        if (p.hp <= 0) {
+            s.status = s.mode === 'permadeath' ? 'ended' : 'dead';
+            if (s.mode === 'normal') {
+                s.drops.push({ id: uuid(), x: p.x, z: p.z, items: p.items.filter(i => i.uid !== p.armor), expires: 0, bag: true });
+                p.items = p.items.filter(i => i.uid === p.armor);
+                normalizeSlots(s);
+            }
+            this.pause('death');
+            void this.save();
+        }
+        this.dirty = true;
+    }
+    respawn() {
+        const s = this.state;
+        if (s.mode === 'permadeath')
+            return;
+        const bed = s.buildings.find(b => b.id === s.player.bed);
+        Object.assign(s.player, { x: bed?.x || 0, z: (bed?.z || 8) + 2, y: 0, vy: 0, hp: 50, hunger: 50, stamina: 100, poison: 0, curse: 0, slow: 0, healLeft: 0, dodgeUntil: s.time + 5 });
+        s.enemies = s.enemies.filter(e => !MONSTERS[e.kind].boss);
+        s.status = 'alive';
+        this.panel = 'pause';
+        void this.save();
+        this.notify('사망 가방을 지도에서 찾을 수 있습니다.');
+    }
+    summon(b: Building) {
+        const s = this.state, kind = b.kind === 'forest_altar' ? 'forest_boss' : b.kind === 'rock_altar' ? 'rock_boss' : b.kind === 'ruin_altar' ? 'ruin_boss' : 'night_boss';
+        if (s.enemies.some(e => MONSTERS[e.kind].boss)) {
+            this.notify('이미 수호자와 전투 중입니다.');
+            return;
+        }
+        if (kind === 'night_boss' && !['forest', 'rock', 'ruin'].every(q => s.quests.includes(q))) {
+            this.notify('서로 다른 봉인 조각 3개가 필요합니다.');
+            return;
+        }
+        s.enemies.push(makeEnemy(s, kind, 1, b.x + 6, b.z));
+        this.notify(`${MONSTERS[kind].name} 등장!`);
+        this.dirty = true;
+        void this.save();
+    }
+    step(dt: number) {
+        if (this.paused || this.state.status !== 'alive' || this.disposed)
+            return;
+        const s = this.state, oldPhase = phase(s.time), oldDay = day(s.time);
+        s.time += dt;
+        s.tick++;
+        this.dirty = true;
+        this.stepClock(oldDay, oldPhase);
+        this.stepPlayer(dt);
+        if (s.status !== 'alive')
+            return;
+        this.stepFacilities(dt);
+        this.stepEnemies(dt);
+        if (s.status !== 'alive')
+            return;
+        this.stepProjectiles(dt);
+        if (s.status !== 'alive')
+            return;
+        s.drops = s.drops.filter(d => d.bag || s.time < d.expires);
+        if (this.keys.has('MouseLeft'))
+            this.attack();
+        this.autosave += dt;
+        if (this.autosave >= 30) {
+            this.autosave = 0;
+            void this.save();
+        }
+        this.uiTick += dt;
+        if (this.uiTick > .12) {
+            this.uiTick = 0;
+            this.onChange();
+        }
+    }
+    private stepClock(oldDay: number, oldPhase: string) {
+        const s = this.state, p = s.player;
+        if (day(s.time) !== oldDay) {
+            s.previousKills = Object.values(s.kills).reduce((a, b) => a + b, 0);
+            s.kills = {};
+            s.enemies = s.enemies.filter(e => e.animal || MONSTERS[e.kind].boss || e.night === 0);
+            s.nightPlan = [];
+            this.notify(`Day ${day(s.time)} · 아침이 밝았습니다.`);
+            for (let i = 0; i < 3; i++)
+                if (s.enemies.filter(e => e.animal).length < 10) {
+                    const a = random(s) * Math.PI * 2;
+                    s.enemies.push(makeEnemy(s, i % 2 ? 'cow' : 'sheep', 1, p.x + Math.cos(a) * 35, p.z + Math.sin(a) * 35, true));
+                }
+        }
+        if (phase(s.time) !== oldPhase) {
+            if (phase(s.time) === '밤') {
+                planNight(s);
+                this.notify(s.blood ? '핏빛 달이 떴습니다.' : '밤이 시작되었습니다.');
+            }
+            void this.save();
+        }
+        if (phase(s.time) === '밤') {
+            const elapsed = s.time % 720 - 510;
+            const wave = Math.floor(elapsed / 60) + 1;
+            if (wave > s.nightWave && s.enemies.filter(e => !e.animal).length < 20) {
+                const amount = Math.ceil(s.nightPlan.length / (4 - wave));
+                for (let i = 0; i < amount && s.enemies.length < 40; i++) {
+                    const e = s.nightPlan.shift();
+                    if (!e)
+                        break;
+                    let placed = false;
+                    for (let tries = 0; tries < 12; tries++) {
+                        const a = random(s) * Math.PI * 2, r = 25 + random(s) * 20, x = p.x + Math.cos(a) * r, z = p.z + Math.sin(a) * r;
+                        if (Math.hypot(x, z) < 462 && !s.buildings.some(b => distance(b, { x, z }) < 6)) {
+                            e.x = x;
+                            e.z = z;
+                            s.enemies.push(e);
+                            placed = true;
+                            break;
+                        }
+                    }
+                    if (!placed)
+                        s.nightPlan.unshift(e);
+                }
+                s.nightWave = wave;
+            }
+        }
+    }
+    private stepPlayer(dt: number) {
+        const s = this.state, p = s.player;
+        let ix = (this.keys.has('KeyD') ? 1 : 0) - (this.keys.has('KeyA') ? 1 : 0), iz = (this.keys.has('KeyW') ? 1 : 0) - (this.keys.has('KeyS') ? 1 : 0);
+        const norm = Math.hypot(ix, iz);
+        if (norm) {
+            ix /= norm;
+            iz /= norm;
+            const run = this.keys.has('ShiftLeft') && p.stamina > 1;
+            let speed = run ? 6.5 : 4;
+            if (p.slow > 0)
+                speed *= .75;
+            if (run) {
+                p.stamina = Math.max(0, p.stamina - 12 * dt);
+                this.lastStamina = s.time;
+            }
+            const nx = p.x + (Math.cos(p.yaw) * ix - Math.sin(p.yaw) * iz) * speed * dt, nz = p.z + (-Math.sin(p.yaw) * ix - Math.cos(p.yaw) * iz) * speed * dt;
+            const blocked = (x: number, z: number) => Math.hypot(x, z) > 465 || s.nodes.some(n => !n.depleted && ['tree', 'hardtree', 'rock', 'iron'].includes(n.kind) && distance(n, { x, z }) < .9) || s.buildings.some(b => ['wall', 'chest', 'furnace', 'advanced_furnace', 'anvil'].includes(b.kind) && distance(b, { x, z }) < 1);
+            if (!blocked(nx, p.z))
+                p.x = nx;
+            if (!blocked(p.x, nz))
+                p.z = nz;
+        }
+        if (this.keys.has('Space') && p.y === 0)
+            p.vy = 5;
+        p.y += p.vy * dt;
+        p.vy -= 15 * dt;
+        if (p.y < 0) {
+            p.y = 0;
+            p.vy = 0;
+        }
+        if (this.keys.has('ControlLeft') && p.stamina >= 25 && s.time > p.dodgeUntil + .8) {
+            p.stamina -= 25;
+            p.dodgeUntil = s.time + .15;
+            this.lastStamina = s.time;
+            const dx = p.x - Math.sin(p.yaw) * 1.3, dz = p.z - Math.cos(p.yaw) * 1.3;
+            if (Math.hypot(dx, dz) < 465 && !s.buildings.some(b => ['wall', 'door', 'chest'].includes(b.kind) && distance(b, { x: dx, z: dz }) < 1.2)) {
+                p.x = dx;
+                p.z = dz;
+            }
+        }
+        if (s.time - this.lastStamina > 1)
+            p.stamina = Math.min(100, p.stamina + (p.hunger < 20 ? 10 : 20) * dt);
+        p.hunger = Math.max(0, p.hunger - dt / 8);
+        if (p.hunger === 0 && s.tick % 150 === 0)
+            this.hurt(1, false);
+        if (p.poison > 0) {
+            p.poison = Math.max(0, p.poison - dt);
+            if (s.tick % 30 === 0)
+                this.hurt(2, false);
+        }
+        p.curse = Math.max(0, p.curse - dt);
+        p.slow = Math.max(0, p.slow - dt);
+        if (p.healLeft > 0) {
+            p.healLeft -= dt;
+            p.hp = Math.min(100, p.hp + p.healRate * dt);
+        }
+        const region = biome(p.x, p.z);
+        if (!s.discovered.includes(region)) {
+            s.discovered.push(region);
+            this.notify(`${region} 발견`);
+        }
+    }
+    private stepFacilities(dt: number) {
+        const s = this.state;
+        for (const n of s.nodes)
+            if (n.depleted && n.readyAt > 0 && s.time >= n.readyAt && !s.buildings.some(b => distance(b, n) < 2)) {
+                n.depleted = false;
+                n.hp = NODES[n.kind].hp;
+            }
+        for (const b of s.buildings) {
+            const j = b.jobs[0];
+            if (!j)
+                continue;
+            const r = RECIPES.find(r => r.id === j.recipe)!;
+            if (j.remaining > 0 && b.fuel > 0) {
+                const work = Math.min(dt, b.fuel, j.remaining);
+                b.fuel -= work;
+                j.remaining -= work;
+            }
+            if (j.remaining <= 0 && give(b.items, r.output, r.qty, 24))
+                b.jobs.shift();
+        }
+    }
+    private stepEnemies(dt: number) {
+        const s = this.state, p = s.player;
+        for (const e of [...s.enemies]) {
+            if (e.hp <= 0)
+                continue;
+            const d = MONSTERS[e.kind], dist = distance(e, p);
+            if (dist > 130)
+                continue;
+            if (e.summon && e.owner && !s.enemies.some(x => x.id === e.owner)) {
+                s.enemies = s.enemies.filter(x => x !== e);
+                continue;
+            }
+            e.slow = Math.max(0, e.slow - dt);
+            e.skill -= dt;
+            if (e.animal) {
+                e.timer -= dt;
+                const a = e.timer > 0 ? Math.atan2(e.z - p.z, e.x - p.x) : s.time * .12 + parseInt(e.id.slice(0, 2), 16);
+                const speed = e.timer > 0 ? d.speed * 1.8 : d.speed * .15;
+                e.x += Math.cos(a) * speed * dt;
+                e.z += Math.sin(a) * speed * dt;
+                continue;
+            }
+            if (d.boss && dist > 60) {
+                s.enemies = s.enemies.filter(x => x !== e);
+                this.notify('수호자 전투 지역을 벗어났습니다.');
+                continue;
+            }
+            if (e.state === 'windup') {
+                e.timer -= dt;
+                if (e.timer <= 0) {
+                    if (d.role !== 'melee' && dist < 25) {
+                        const dx = p.x - e.x, dz = p.z - e.z, l = Math.hypot(dx, dz) || 1;
+                        s.projectiles.push({ id: uuid(), x: e.x, y: height(e.x, e.z) + 1.3, z: e.z, vx: dx / l * 10, vy: 0, vz: dz / l * 10, life: 5, damage: d.damage * (1 + .1 * (e.tier - d.min)), enemy: true, type: e.kind });
+                    }
+                    else if (dist < 2.8) {
+                        this.hurt(d.damage * (1 + .1 * (e.tier - d.min)) * (s.difficulty === 'easy' ? .8 : s.difficulty === 'hard' ? 1.2 : 1));
+                        if (e.kind === 'spider')
+                            p.poison = 5;
+                    }
+                    e.state = 'recover';
+                    e.timer = d.boss ? 1.3 : 1;
+                }
+            }
+            else if (e.state === 'recover') {
+                e.timer -= dt;
+                if (e.timer <= 0)
+                    e.state = 'chase';
+            }
+            else {
+                const reach = d.role === 'melee' ? 2 : 14;
+                if (dist > reach) {
+                    const speed = d.speed * (e.slow > 0 ? .75 : 1);
+                    const nx = e.x + (p.x - e.x) / dist * speed * dt, nz = e.z + (p.z - e.z) / dist * speed * dt;
+                    const wall = s.buildings.find(b => ['wall', 'door'].includes(b.kind) && distance(b, { x: nx, z: nz }) < 1.1);
+                    if (wall) {
+                        wall.hp -= d.damage * dt * .3;
+                        if (wall.hp <= 0)
+                            this.breakBuilding(wall);
+                    }
+                    else {
+                        e.x = nx;
+                        e.z = nz;
+                    }
+                }
+                else {
+                    e.state = 'windup';
+                    e.timer = d.boss ? 1.1 : d.role === 'melee' ? .6 : .8;
+                }
+            }
+            if (e.kind === 'wizard' && e.skill <= 0 && dist < 22 && s.enemies.filter(x => x.owner === e.id).length < 3 && s.enemies.length < 40) {
+                const n = makeEnemy(s, 'zombie', Math.min(5, e.tier), e.x + 2, e.z, false, true);
+                n.owner = e.id;
+                s.enemies.push(n);
+                e.skill = 15;
+            }
+        }
+    }
+    private stepProjectiles(dt: number) {
+        const s = this.state, p = s.player;
+        for (const q of [...s.projectiles]) {
+            const prev = { x: q.x, y: q.y, z: q.z };
+            q.life -= dt;
+            q.x += q.vx * dt;
+            q.y += q.vy * dt;
+            q.z += q.vz * dt;
+            if (q.type.includes('arrow'))
+                q.vy -= 7 * dt;
+            let contact: number | null = null;
+            let target: Enemy | 'player' | null = null;
+            // Walls participate in the same nearest-contact query as actors.
+            for (const b of s.buildings) {
+                if (!['wall', 'door'].includes(b.kind))
+                    continue;
+                const t = segmentSphere(prev, q, { x: b.x, y: height(b.x, b.z) + 1, z: b.z }, 1);
+                if (t !== null && (contact === null || t < contact)) {
+                    contact = t;
+                    target = null;
+                }
+            }
+            if (q.enemy) {
+                const t = segmentSphere(prev, q, { x: p.x, y: height(p.x, p.z) + p.y + 1, z: p.z }, .75);
+                if (t !== null && (contact === null || t < contact)) {
+                    contact = t;
+                    target = 'player';
+                }
+            }
+            else
+                for (const e of s.enemies) {
+                    const t = segmentSphere(prev, q, { x: e.x, y: height(e.x, e.z) + 1, z: e.z }, .9);
+                    if (t !== null && (contact === null || t < contact)) {
+                        contact = t;
+                        target = e;
+                    }
+                }
+            if (target === 'player') {
+                this.hurt(q.damage);
+                if (q.type === 'frost')
+                    p.slow = 3;
+                if (q.type === 'wizard')
+                    p.curse = 8;
+            }
+            else if (target) {
+                if (q.type === 'pain')
+                    target.vulnerable = s.time + 8;
+                else
+                    this.hitEnemy(target, q.damage + (q.type === 'poison_arrow' ? 10 : 0), q.type);
+                if (q.type === 'blast_arrow')
+                    for (const e of [...s.enemies])
+                        if (e !== target && distance(e, target) < 3)
+                            this.hitEnemy(e, q.damage * .7, q.type);
+            }
+            if (q.y < height(q.x, q.z) || q.life <= 0 || Math.hypot(q.x, q.z) > 490 || contact !== null)
+                s.projectiles = s.projectiles.filter(p => p !== q);
+        }
+    }
+    breakBuilding(b: Building) {
+        const s = this.state, items = structuredClone(b.items);
+        for (const j of b.jobs)
+            for (const [id, n] of Object.entries(j.reserved))
+                give(items, id, n, 100);
+        if (items.length)
+            s.drops.push({ id: uuid(), x: b.x, z: b.z, items, expires: 0, bag: true });
+        s.buildings = s.buildings.filter(x => x !== b);
+        this.dirty = true;
+    }
+    async save(): Promise<void> {
+        return this.saveQueue.request(async () => {
+            if (this.disposed)
+                return false;
+            this.saveLabel = '저장 중…';
+            this.onChange();
+            this.dirty = false;
+            try {
+                this.savedAt = await this.storage.save(this.state);
+                this.saveLabel = `저장됨 · ${new Date(this.savedAt).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}`;
+                this.error = '';
+                return true;
+            }
+            catch (e) {
+                this.dirty = true;
+                this.error = e instanceof Error ? e.message : '저장 실패';
+                this.saveLabel = '저장 실패 · 파일 백업을 이용하세요';
+                this.notify(this.error);
+                return false;
+            }
+            finally {
+                this.onChange();
+            }
+        });
+    }
+    async export() {
+        try {
+            await exportFile(this.state);
+            this.notify('백업 파일 다운로드를 요청했습니다.');
+        }
+        catch (e) {
+            this.notify(String(e));
+        }
+    }
+    dispose() {
+        this.disposed = true;
+        this.keys.clear();
+        this.storage.lockLost = () => {
+        };
+    }
 }
