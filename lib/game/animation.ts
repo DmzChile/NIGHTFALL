@@ -28,11 +28,14 @@ export function handPose(action: HandAction, elapsed: number, time: number, spee
     const duration = action === 'consume' ? .65 : action === 'place' ? .4 : .38;
     const t = clamp01(elapsed / duration), pulse = Math.sin(Math.PI * t), moving = clamp01(speed / 6.5);
     const bob = Math.sin(time * 10) * .018 * moving;
-    const result = { x: Math.sin(time * 5) * .014 * moving, y: bob, z: 0, pitch: 0, roll: 0, bowPull: 0 };
+    const result = { x: Math.sin(time * 5) * .014 * moving, y: bob, z: 0, pitch: 0, yaw: 0, roll: 0, bowPull: 0 };
     if (action === 'melee' || action === 'gather') {
-        result.pitch = -pulse * (action === 'gather' ? 1 : .82);
-        result.roll = pulse * (action === 'gather' ? .26 : .45);
-        result.z = -pulse * .13;
+        result.x -= pulse * .18;
+        result.y -= pulse * .04;
+        result.pitch = -pulse * (action === 'gather' ? .9 : .72);
+        result.yaw = pulse * .4;
+        result.roll = pulse * .35;
+        result.z = -pulse * .1;
     }
     else if (action === 'bow') {
         result.z = pulse * .12;
@@ -44,6 +47,7 @@ export function handPose(action: HandAction, elapsed: number, time: number, spee
         result.pitch = pulse * .18;
     }
     else if (action === 'consume') {
+        result.x -= pulse * .16;
         result.y += pulse * .24;
         result.z += pulse * .25;
         result.roll = -pulse * .42;

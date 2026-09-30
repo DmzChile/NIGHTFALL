@@ -2,10 +2,12 @@ import { creaturePose, handPose, MotionSample, damp, type HandAction } from './a
 import { createCreatureRig, poseCreature, type CreatureRig } from './rig';
 import { EffectPool } from './effects';
 import type { VisualEvent } from './visual-events';
+import { GrassField, TERRAIN_SIZE, TERRAIN_SEGMENTS } from './grass';
+import { createViewModel, viewModelTransform } from './viewmodel';
 import * as THREE from 'three';
 import { Engine } from './engine';
 import { biome, height, createWorld, selected, type State } from './model';
-import { ITEMS, NODES, MONSTERS } from './data';
+import { NODES, MONSTERS } from './data';
 export class GameScene {
     renderer: THREE.WebGLRenderer;
     scene = new THREE.Scene();
@@ -18,6 +20,7 @@ export class GameScene {
     held = new THREE.Group();
     guard = new THREE.Group();
     effects = new EffectPool();
+    grass = new GrassField();
     rigs = new WeakMap<THREE.Group, CreatureRig>();
     ghosts: {
         rig: CreatureRig;
@@ -57,7 +60,7 @@ export class GameScene {
         this.scene.fog = new THREE.FogExp2(0xaac3bb, .0065);
         this.scene.add(this.ambient, this.sun, this.root, this.camera);
         this.sun.position.set(-30, 60, -20);
-        const g = new THREE.PlaneGeometry(1100, 1100, 100, 100);
+        const g = new THREE.PlaneGeometry(TERRAIN_SIZE, TERRAIN_SIZE, TERRAIN_SEGMENTS, TERRAIN_SEGMENTS);
         g.rotateX(-Math.PI / 2);
         const p = g.attributes.position, colors = [];
         for (let i = 0; i < p.count; i++) {
@@ -79,7 +82,7 @@ export class GameScene {
         this.moonOrb = new THREE.Mesh(new THREE.SphereGeometry(4, 12, 8), new THREE.MeshBasicMaterial({ color: 0xb7d4e0 }));
         this.scene.add(this.sunOrb, this.moonOrb);
         this.camera.add(this.held, this.guard);
-        this.scene.add(this.effects.mesh);
+        this.scene.add(this.effects.mesh, this.grass.mesh);
         this.mesh(this.guard, 'box', 0x806347, 0, 0, 0, .55, .65, .1);
         this.mesh(this.guard, 'box', 0x4c463c, 0, 0, -.065, .07, .68, .04);
         this.resize = () => {
@@ -240,6 +243,7 @@ export class GameScene {
             this.scene.remove(ghost.rig.root);
         this.ghosts = [];
         this.effects.clear();
+        this.grass.clear();
         this.flash = 0;
         this.visualTime = 0;
         this.actionStart = -100;
@@ -256,6 +260,7 @@ export class GameScene {
     }
     onVisual(event: VisualEvent) {
         if (event.type === 'action') {
+            if (event.action === 'place') this.grass.invalidate();
             this.handAction = event.action;
             this.actionStart = this.visualTime;
             if (event.action === 'staff' && this.engine) {
@@ -264,6 +269,7 @@ export class GameScene {
             }
         }
         else if (event.type === 'gather') {
+            if (this.engine?.state.nodes.find(n => n.id === event.id)?.depleted) this.grass.invalidate();
             const g = this.objects.get(event.id);
             if (g)
                 g.userData.shakeAt = this.visualTime;
@@ -489,43 +495,7 @@ export class GameScene {
             if (this.held.userData.id !== id) {
                 this.held.clear();
                 this.held.userData.id = id;
-                const group = new THREE.Group();
-                if (id === 'hand') {
-                    this.mesh(group, 'box', 0xb78e72, .36, -.32, -.62, .18, .35, .25);
-                }
-                else if (id.includes('bow')) {
-                    const upper = this.mesh(group, 'cylinder', 0x816340, .32, .05, -.69, .035, .48, .035);
-                    upper.rotation.x = -.28;
-                    const lower = this.mesh(group, 'cylinder', 0x816340, .32, -.37, -.69, .035, .48, .035);
-                    lower.rotation.x = .28;
-                    const string = new THREE.Group();
-                    string.name = 'bow-string';
-                    string.position.set(.32, -.16, -.756);
-                    for (const side of [1, -1])
-                        this.mesh(string, 'cylinder', 0xcfc5a8, 0, side * .218, 0, .009, .436, .009);
-                    group.add(string);
-                }
-                else if (id === 'fishing_rod') {
-                    this.mesh(group, 'cylinder', 0x967147, .32, -.1, -.65, .025, 1.25, .025);
-                    const line = this.mesh(group, 'cylinder', 0xc7d4d1, .32, -.2, -.94, .006, .9, .006);
-                    line.rotation.x = .5;
-                }
-                else if (id.includes('staff')) {
-                    this.mesh(group, 'cylinder', 0x796444, .35, -.2, -.65, .04, .9, .04);
-                    this.mesh(group, 'rock', id.startsWith('fire') ? 0xdd9b62 : 0x9eced2, .35, .3, -.65, .14, .16, .14);
-                }
-                else {
-                    this.mesh(group, 'cylinder', 0x9a7754, .32, -.32, -.65, .04, .6, .04);
-                    if (id.includes('axe'))
-                        this.mesh(group, 'box', 0xa1ada6, .37, .01, -.67, .35, .2, .08);
-                    else if (id.includes('pick'))
-                        this.mesh(group, 'box', 0xa1ada6, .33, .01, -.67, .55, .1, .08);
-                    else if (ITEMS[id].kind === 'weapon')
-                        this.mesh(group, 'box', 0xbac7c2, .32, .2, -.65, .1, .55, .06);
-                    else
-                        this.mesh(group, 'rock', 0xd0b47a, .34, -.1, -.65, .18, .22, .18);
-                }
-                this.held.add(group);
+                this.held.add(createViewModel(id, (...args) => this.mesh(...args)));
             }
             this.playerMotion ??= new MotionSample(p.x, p.z, s.time);
             this.playerMotion.update(p.x, p.z, s.time);
@@ -533,8 +503,9 @@ export class GameScene {
             this.guardBlend = damp(this.guardBlend, this.engine.blocking && hasShield && !twoHanded && p.stamina > 0 && s.time - p.actionAt >= .25 ? 1 : 0, 14, dt);
             const pose = handPose(this.handAction, this.visualTime - this.actionStart, this.visualTime, this.playerMotion.speed, this.guardBlend, !!p.fishing);
             this.held.visible = !this.engine.paused;
-            this.held.position.set(pose.x, pose.y, pose.z);
-            this.held.rotation.set(pose.pitch, 0, pose.roll);
+            const viewPose = viewModelTransform(id, this.camera.aspect, this.camera.fov, pose);
+            this.held.position.set(viewPose.x, viewPose.y, viewPose.z);
+            this.held.rotation.set(viewPose.pitch, viewPose.yaw, viewPose.roll);
             const string = this.held.getObjectByName('bow-string');
             if (string) {
                 string.children.forEach((segment, i) => {
@@ -544,7 +515,7 @@ export class GameScene {
                 });
             }
             this.guard.visible = !this.engine.paused && hasShield && !twoHanded;
-            this.guard.position.set(-.46 + this.guardBlend * .12, -.58 + this.guardBlend * .4, -.65);
+            this.guard.position.set(-Math.tan(this.camera.fov * Math.PI / 360) * .82 * this.camera.aspect * .62 + this.guardBlend * .12, -.58 + this.guardBlend * .4, -.82);
             this.guard.rotation.set(-this.guardBlend * .16, .2 + this.guardBlend * .3, this.guardBlend * .08);
         }
         else {
@@ -554,6 +525,7 @@ export class GameScene {
             this.held.visible = false;
             this.guard.visible = false;
         }
+        this.grass.update(s.seed, this.camera.position.x, this.camera.position.z, s.buildings, s.nodes, this.visualTime);
         const time = this.engine ? s.time % 720 : 430, daylight = time < 450 ? 1 : time < 510 ? 1 - (time - 450) / 60 * .9 : time < 690 ? .1 : .1 + (time - 690) / 30 * .9;
         const sky = new THREE.Color().lerpColors(new THREE.Color(0x10202f), new THREE.Color(time > 420 && time < 510 ? 0xc3aaa0 : 0xaac3bb), daylight);
         this.scene.background = sky;
@@ -599,6 +571,7 @@ export class GameScene {
         this.events.abort();
         this.setEngine(null);
         this.effects.dispose();
+        this.grass.dispose();
         this.renderer.dispose();
         this.ground.geometry.dispose();
         this.water.geometry.dispose();
