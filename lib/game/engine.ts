@@ -1,3 +1,5 @@
+import { discoverItems, ensureProgression } from './progression';
+import { REGION_ENEMIES, regionWarning } from './regions';
 import { segmentSphere } from './collision';
 import { SaveQueue } from './save-queue';
 import { ITEMS, NODES, MONSTERS, RECIPES, day, phase, type Recipe } from './data';
@@ -41,7 +43,9 @@ export class Engine {
     private lastStamina = 0;
     private attackPressed = false;
     constructor(s: State, storage: SaveManager) {
+        ensureProgression(s);
         this.state = s;
+        this.lastStamina=s.player.staminaAt??0;
         this.storage = storage;
         this.panel = s.status === 'alive' ? 'pause' : 'death';
         if (s.generation > 0)
@@ -127,8 +131,10 @@ export class Engine {
                 p.healLeft = 6;
                 p.healRate = 20 / 6;
             }
-            if (it.id === 'antidote')
+            if (it.id === 'antidote') {
                 p.poison = 0;
+                p.poisonResist = 10;
+            }
             if (it.id === 'purify')
                 p.curse = 0;
             if (it.id === 'pain') {
@@ -138,6 +144,7 @@ export class Engine {
             p.potionAt = s.time;
             this.notify(`${d.name} 사용`);
         }
+        discoverItems(s);
         normalizeSlots(s);
         this.dirty = true;
         this.onChange();
@@ -313,6 +320,7 @@ export class Engine {
         take(p.items, it.id, 1);
         if (it.id === 'bedroll')
             p.bed = b.id;
+        discoverItems(s);
         normalizeSlots(s);
         this.dirty = true;
         this.notify(`${ITEMS[it.id].name} 배치`);
@@ -334,6 +342,7 @@ export class Engine {
         const ok = deposit ? transactTransfer(this.state.player.items, b.items, uid, 24) : transactTransfer(b.items, this.state.player.items, uid, capacity(this.state));
         if (!ok)
             this.notify('보관 공간이 부족합니다.');
+        discoverItems(this.state);
         normalizeSlots(this.state);
         this.dirty = true;
         this.onChange();
@@ -342,6 +351,7 @@ export class Engine {
         const b = this.state.buildings.find(b => b.id === this.facility);
         if (b && ['wood', 'coal', 'charcoal'].includes(id) && take(this.state.player.items, id, 1)) {
             b.fuel += id === 'coal' ? 40 : id === 'charcoal' ? 20 : 10;
+            discoverItems(this.state);
             normalizeSlots(this.state);
             this.dirty = true;
             this.onChange();
@@ -358,6 +368,7 @@ export class Engine {
                 return;
             }
         this.state.player.items = arr;
+        discoverItems(this.state);
         b.jobs = b.jobs.filter(x => x !== j);
         this.dirty = true;
         this.onChange();
@@ -372,11 +383,15 @@ export class Engine {
             this.notify(`${station === 'anvil' ? '모루' : '제작대'}가 가까이 있어야 합니다.`);
             return;
         }
-        const material = it.id.startsWith('iron') ? 'iron' : it.id.startsWith('steel') ? 'steel' : it.id.startsWith('mithril') ? 'mithril' : it.id.includes('obsidian') ? 'obsidian' : d.tool ? 'stone' : 'wood';
-        if (!take(s.player.items, material, 1)) {
+        if (it.dur >= d.durability!)
+            return;
+        const inputs: Record<string, number> = it.id === 'bow' && it.dur <= 45 ? { wood: 2, rope: 1 } : { [it.id.startsWith('iron') ? 'iron' : it.id.startsWith('steel') ? 'steel' : it.id.startsWith('mithril') ? 'mithril' : it.id.includes('obsidian') ? 'obsidian' : d.tool ? 'stone' : 'wood']: 1 };
+        if (Object.entries(inputs).some(([id, n]) => count(s.player.items, id) < n)) {
             this.notify('수리 재료가 부족합니다.');
             return;
         }
+        for (const [id, n] of Object.entries(inputs))
+            take(s.player.items, id, n);
         it.dur = Math.min(d.durability!, it.dur + Math.ceil(d.durability! * .25));
         this.dirty = true;
         this.notify('장비를 수리했습니다.');
@@ -384,7 +399,7 @@ export class Engine {
     }
     attack() {
         const s = this.state, p = s.player, it = selected(s), d = it ? ITEMS[it.id] : null;
-        if (s.time - p.actionAt < (d?.interval || .6))
+        if ((p.stagger || 0) > 0 || p.fishing || s.time - p.actionAt < (d?.interval || .6))
             return;
         if (d?.kind === 'food' || d?.kind === 'potion') {
             this.useItem();
@@ -399,13 +414,9 @@ export class Engine {
                 this.notify('해안 가까이에서 낚싯대를 사용하세요.');
                 return;
             }
-            p.actionAt = s.time + 7;
-            if (random(s) < .7) {
-                addItem(s, 'fish', 1);
-                this.notify('생선을 낚았습니다.');
-            }
-            else
-                this.notify('물고기가 미끼를 피했습니다.');
+            p.actionAt = s.time;
+            p.fishing = { uid: it.uid, x: p.x, z: p.z, remaining: 7, success: random(s) < .7 };
+            this.notify('낚시 시작 · 7초 동안 낚싯대를 들고 기다리세요.');
             this.dirty = true;
             return;
         }
@@ -450,6 +461,7 @@ export class Engine {
         }
         if (it?.dur !== undefined)
             it.dur = Math.max(0, it.dur - 1);
+        discoverItems(s);
         normalizeSlots(s);
         this.dirty = true;
     }
@@ -459,18 +471,22 @@ export class Engine {
             return;
         if ((e.vulnerable || 0) > s.time)
             damage *= MONSTERS[e.kind].boss ? 1.1 : 1.2;
-        if (e.kind.includes('golem') || e.kind === 'rock_boss') {
+        if (type !== 'dot' && (e.kind.includes('golem') || e.kind === 'rock_boss')) {
             damage *= type.includes('pick') || type === 'club' ? .85 : .65;
         }
-        if (e.kind === 'guard' && type !== 'club')
+        if (type !== 'dot' && e.kind === 'guard' && type !== 'club')
             damage *= .75;
         if (type === 'silver_arrow' && ['zombie', 'archer', 'guard', 'wizard'].includes(e.kind))
             damage *= 1.25;
         if (type === 'frost_staff')
             e.slow = 3;
+        if (type === 'poison_arrow')
+            e.poison = 5;
+        if (type === 'fire_staff' && e.kind !== 'ember')
+            e.burn = 4;
         if (type === 'fire_staff' && e.kind === 'ember')
             damage *= .5;
-        e.hp -= Math.round(damage);
+        e.hp -= damage > 0 ? Math.max(1, Math.round(damage)) : 0;
         if (e.animal) {
             e.timer = 3;
             e.state = 'recover';
@@ -484,6 +500,10 @@ export class Engine {
             const items: Stack[] = [];
             for (const [id, n] of Object.entries(e.loot))
                 give(items, id, n, 100);
+            for (const gear of e.lootGear || []) {
+                const item = { uid: uuid(), id: gear.id, qty: 1, dur: gear.dur };
+                items.push(item);
+            }
             s.drops.push({ id: `drop-${e.id}`, x: e.x, z: e.z, items, expires: s.time + 600, bag: false });
         }
         if (e.kind.endsWith('_boss')) {
@@ -512,27 +532,43 @@ export class Engine {
         this.dirty = true;
         this.notify(`${MONSTERS[e.kind].name} 처치`);
     }
-    hurt(damage: number, direct = true) {
+    hurt(damage: number, direct = true, source?: {
+        x: number;
+        z: number;
+    }) {
         const s = this.state, p = s.player;
         if (s.status !== 'alive' || (direct && (s.time - p.hitAt < .25 || s.time < p.dodgeUntil)))
             return;
         const armor = p.items.find(i => i.uid === p.armor), def = armor && armor.dur !== 0 ? ITEMS[armor.id].armor || 0 : 0;
         let result = direct ? damage * 100 / (100 + def) * (p.curse > 0 ? 1.2 : 1) : damage;
-        if (direct && this.blocking && p.items.some(i => i.id === 'shield' && (i.dur || 0) > 0)) {
+        const held = selected(s);
+        const dx = source ? source.x - p.x : 0, dz = source ? source.z - p.z : 0, l = Math.hypot(dx, dz);
+        const facing = l > 0 && (-Math.sin(p.yaw) * dx - Math.cos(p.yaw) * dz) / l >= Math.cos(50 * Math.PI / 180);
+        const twoHanded = held?.id.includes('bow') || held?.id.endsWith('_staff');
+        if (direct && this.blocking && facing && !twoHanded && s.time - p.actionAt >= .25 && p.items.some(i => i.id === 'shield' && (i.dur || 0) > 0)) {
+            this.lastStamina = s.time;
+            p.staminaAt=s.time;
             if (p.stamina >= 12) {
                 p.stamina -= 12;
                 result *= .3;
                 const shield = p.items.find(i => i.id === 'shield')!;
                 shield.dur = Math.max(0, (shield.dur || 0) - 1);
             }
-            else
+            else {
                 p.stamina = 0;
+                p.stagger = .6;
+                this.notify("방어 실패 · 스태미나가 부족합니다.");
+            }
         }
-        p.hp = Math.max(0, p.hp - Math.round(result));
+        p.hp = Math.max(0, p.hp - (damage > 0 ? Math.max(1, Math.round(result)) : 0));
         if (direct) {
             p.hitAt = s.time;
             p.healLeft = 0;
             this.onHit();
+            if (p.fishing) {
+                p.fishing = undefined;
+                this.notify('피격으로 낚시가 취소되었습니다.');
+            }
         }
         if (p.hp <= 0) {
             s.status = s.mode === 'permadeath' ? 'ended' : 'dead';
@@ -541,6 +577,7 @@ export class Engine {
                 p.items = p.items.filter(i => i.uid === p.armor);
                 normalizeSlots(s);
             }
+            p.fishing = undefined;
             this.pause('death');
             void this.save();
         }
@@ -551,7 +588,7 @@ export class Engine {
         if (s.mode === 'permadeath')
             return;
         const bed = s.buildings.find(b => b.id === s.player.bed);
-        Object.assign(s.player, { x: bed?.x || 0, z: (bed?.z || 8) + 2, y: 0, vy: 0, hp: 50, hunger: 50, stamina: 100, poison: 0, curse: 0, slow: 0, healLeft: 0, dodgeUntil: s.time + 5 });
+        Object.assign(s.player, { x: bed?.x || 0, z: (bed?.z || 8) + 2, y: 0, vy: 0, hp: 50, hunger: 50, stamina: 100, poison: 0, curse: 0, slow: 0, stagger: 0, poisonResist: 0, fishing: undefined, healLeft: 0, dodgeUntil: s.time + 5 });
         s.enemies = s.enemies.filter(e => !MONSTERS[e.kind].boss);
         s.status = 'alive';
         this.panel = 'pause';
@@ -585,6 +622,8 @@ export class Engine {
         if (s.status !== 'alive')
             return;
         this.stepFacilities(dt);
+        this.stepFishing(dt);
+        this.stepRegions();
         this.stepEnemies(dt);
         if (s.status !== 'alive')
             return;
@@ -631,7 +670,7 @@ export class Engine {
             const wave = Math.floor(elapsed / 60) + 1;
             if (wave > s.nightWave && s.enemies.filter(e => !e.animal).length < 20) {
                 const amount = Math.ceil(s.nightPlan.length / (4 - wave));
-                for (let i = 0; i < amount && s.enemies.length < 40; i++) {
+                for (let i = 0; i < amount && s.enemies.length < 40 && s.enemies.filter(e => !e.animal).length < 20; i++) {
                     const e = s.nightPlan.shift();
                     if (!e)
                         break;
@@ -657,7 +696,7 @@ export class Engine {
         const s = this.state, p = s.player;
         let ix = (this.keys.has('KeyD') ? 1 : 0) - (this.keys.has('KeyA') ? 1 : 0), iz = (this.keys.has('KeyW') ? 1 : 0) - (this.keys.has('KeyS') ? 1 : 0);
         const norm = Math.hypot(ix, iz);
-        if (norm) {
+        if (norm && !(p.stagger || 0)) {
             ix /= norm;
             iz /= norm;
             const run = this.keys.has('ShiftLeft') && p.stamina > 1;
@@ -667,6 +706,7 @@ export class Engine {
             if (run) {
                 p.stamina = Math.max(0, p.stamina - 12 * dt);
                 this.lastStamina = s.time;
+            p.staminaAt=s.time;
             }
             const nx = p.x + (Math.cos(p.yaw) * ix - Math.sin(p.yaw) * iz) * speed * dt, nz = p.z + (-Math.sin(p.yaw) * ix - Math.cos(p.yaw) * iz) * speed * dt;
             const blocked = (x: number, z: number) => Math.hypot(x, z) > 465 || s.nodes.some(n => !n.depleted && ['tree', 'hardtree', 'rock', 'iron'].includes(n.kind) && distance(n, { x, z }) < .9) || s.buildings.some(b => ['wall', 'chest', 'furnace', 'advanced_furnace', 'anvil'].includes(b.kind) && distance(b, { x, z }) < 1);
@@ -675,7 +715,7 @@ export class Engine {
             if (!blocked(p.x, nz))
                 p.z = nz;
         }
-        if (this.keys.has('Space') && p.y === 0)
+        if (this.keys.has('Space') && p.y === 0 && !(p.stagger || 0))
             p.vy = 5;
         p.y += p.vy * dt;
         p.vy -= 15 * dt;
@@ -683,10 +723,11 @@ export class Engine {
             p.y = 0;
             p.vy = 0;
         }
-        if (this.keys.has('ControlLeft') && p.stamina >= 25 && s.time > p.dodgeUntil + .8) {
+        if (this.keys.has('ControlLeft') && !(p.stagger || 0) && p.stamina >= 25 && s.time > p.dodgeUntil + .8) {
             p.stamina -= 25;
             p.dodgeUntil = s.time + .15;
             this.lastStamina = s.time;
+            p.staminaAt=s.time;
             const dx = p.x - Math.sin(p.yaw) * 1.3, dz = p.z - Math.cos(p.yaw) * 1.3;
             if (Math.hypot(dx, dz) < 465 && !s.buildings.some(b => ['wall', 'door', 'chest'].includes(b.kind) && distance(b, { x: dx, z: dz }) < 1.2)) {
                 p.x = dx;
@@ -695,7 +736,9 @@ export class Engine {
         }
         if (s.time - this.lastStamina > 1)
             p.stamina = Math.min(100, p.stamina + (p.hunger < 20 ? 10 : 20) * dt);
-        p.hunger = Math.max(0, p.hunger - dt / 8);
+        p.hunger = Math.max(0, p.hunger - dt / 8 * (norm && this.keys.has('ShiftLeft') && p.stamina > 1 ? 1.5 : 1));
+        p.stagger = Math.max(0, (p.stagger || 0) - dt);
+        p.poisonResist = Math.max(0, (p.poisonResist || 0) - dt);
         if (p.hunger === 0 && s.tick % 150 === 0)
             this.hurt(1, false);
         if (p.poison > 0) {
@@ -709,10 +752,66 @@ export class Engine {
             p.healLeft -= dt;
             p.hp = Math.min(100, p.hp + p.healRate * dt);
         }
+        for (const id of discoverItems(s))
+            this.notify(`${RECIPES.find(r => r.id === id)?.output ? ITEMS[RECIPES.find(r => r.id === id)!.output].name : id} 제작법 해금`);
         const region = biome(p.x, p.z);
         if (!s.discovered.includes(region)) {
             s.discovered.push(region);
-            this.notify(`${region} 발견`);
+            this.notify(`${region} 발견 · ${regionWarning(region)}`);
+        }
+    }
+    private stepFishing(dt: number) {
+        const s = this.state, p = s.player, f = p.fishing;
+        if (!f)
+            return;
+        if (selected(s)?.uid !== f.uid || distance(p, f) > 1 || this.keys.has('Space')) {
+            p.fishing = undefined;
+            this.notify('이동하거나 장비를 바꿔 낚시가 취소되었습니다.');
+            return;
+        }
+        f.remaining = Math.max(0, f.remaining - dt);
+        if (f.remaining > 1e-8)
+            return;
+        p.fishing = undefined;
+        if (f.success) {
+            if (addItem(s, 'fish', 1))
+                this.notify('생선을 낚았습니다.');
+            else {
+                s.drops.push({ id: uuid(), x: p.x, z: p.z, items: [{ uid: uuid(), id: 'fish', qty: 1 }], expires: s.time + 600, bag: false });
+                this.notify('배낭이 가득 차 생선을 바닥에 놓았습니다.');
+            }
+        }
+        else
+            this.notify('물고기가 미끼를 피했습니다.');
+        p.actionAt = s.time;
+    }
+    private stepRegions() {
+        const s = this.state, p = s.player;
+        // Replenish at most once per second and retain per-region cooldowns in saves.
+        if (s.tick % 30 !== 0)
+            return;
+        s.enemies = s.enemies.filter(e => !e.region || distance(e, p) < 180);
+        const region = biome(p.x, p.z), pool = REGION_ENEMIES[region];
+        if (!pool || Math.hypot(p.x, p.z) < 100)
+            return;
+        const next = s.regionNext ??= {};
+        if (next[region] === undefined) {
+            next[region] = s.time + 12;
+            return;
+        }
+        if (s.time < next[region] || s.enemies.filter(e => e.region === region).length >= 2 || s.enemies.filter(e => e.region).length >= 6 || s.enemies.filter(e => !e.animal).length >= 20)
+            return;
+        for (let tries = 0; tries < 12; tries++) {
+            const a = random(s) * Math.PI * 2, r = 28 + random(s) * 12, x = p.x + Math.cos(a) * r, z = p.z + Math.sin(a) * r;
+            if (Math.hypot(x, z) > 462 || biome(x, z) !== region || s.buildings.some(b => distance(b, { x, z }) < 8))
+                continue;
+            const choice = pool[Math.floor(random(s) * pool.length)], enemy = makeEnemy(s, choice.kind, choice.tier, x, z);
+            enemy.region = region;
+            enemy.night = 0;
+            s.enemies.push(enemy);
+            next[region] = s.time + 120;
+            this.notify(`${region}의 ${MONSTERS[choice.kind].name}이 주변을 배회합니다.`);
+            break;
         }
     }
     private stepFacilities(dt: number) {
@@ -742,6 +841,18 @@ export class Engine {
             if (e.hp <= 0)
                 continue;
             const d = MONSTERS[e.kind], dist = distance(e, p);
+            const poisoned = (e.poison || 0) > 0, burning = (e.burn || 0) > 0;
+            if (poisoned || burning) {
+                e.dotTick = (e.dotTick || 0) + Math.min(dt, Math.max(e.poison || 0, e.burn || 0));
+                e.poison = Math.max(0, (e.poison || 0) - dt);
+                e.burn = Math.max(0, (e.burn || 0) - dt);
+                if (e.dotTick >= 1 - 1e-8) {
+                    e.dotTick = Math.max(0, e.dotTick - 1);
+                    this.hitEnemy(e, ((poisoned ? 2 : 0) + (burning ? 3 : 0)) * (d.boss ? .5 : 1), 'dot');
+                    if (e.hp <= 0)
+                        continue;
+                }
+            }
             if (dist > 130)
                 continue;
             if (e.summon && e.owner && !s.enemies.some(x => x.id === e.owner)) {
@@ -771,8 +882,8 @@ export class Engine {
                         s.projectiles.push({ id: uuid(), x: e.x, y: height(e.x, e.z) + 1.3, z: e.z, vx: dx / l * 10, vy: 0, vz: dz / l * 10, life: 5, damage: d.damage * (1 + .1 * (e.tier - d.min)), enemy: true, type: e.kind });
                     }
                     else if (dist < 2.8) {
-                        this.hurt(d.damage * (1 + .1 * (e.tier - d.min)) * (s.difficulty === 'easy' ? .8 : s.difficulty === 'hard' ? 1.2 : 1));
-                        if (e.kind === 'spider')
+                        this.hurt(d.damage * (1 + .1 * (e.tier - d.min)) * (s.difficulty === 'easy' ? .8 : s.difficulty === 'hard' ? 1.2 : 1), true, e);
+                        if (e.kind === 'spider' && !(p.poisonResist || 0))
                             p.poison = 5;
                     }
                     e.state = 'recover';
@@ -787,7 +898,7 @@ export class Engine {
             else {
                 const reach = d.role === 'melee' ? 2 : 14;
                 if (dist > reach) {
-                    const speed = d.speed * (e.slow > 0 ? .75 : 1);
+                    const speed = d.speed * (e.slow > 0 ? (d.boss ? .9 : .75) : 1);
                     const nx = e.x + (p.x - e.x) / dist * speed * dt, nz = e.z + (p.z - e.z) / dist * speed * dt;
                     const wall = s.buildings.find(b => ['wall', 'door'].includes(b.kind) && distance(b, { x: nx, z: nz }) < 1.1);
                     if (wall) {
@@ -851,7 +962,7 @@ export class Engine {
                     }
                 }
             if (target === 'player') {
-                this.hurt(q.damage);
+                this.hurt(q.damage * (s.difficulty === 'easy' ? .8 : s.difficulty === 'hard' ? 1.2 : 1), true, prev);
                 if (q.type === 'frost')
                     p.slow = 3;
                 if (q.type === 'wizard')
@@ -859,9 +970,9 @@ export class Engine {
             }
             else if (target) {
                 if (q.type === 'pain')
-                    target.vulnerable = s.time + 8;
+                    target.vulnerable = s.time + (MONSTERS[target.kind].boss ? 5 : 8);
                 else
-                    this.hitEnemy(target, q.damage + (q.type === 'poison_arrow' ? 10 : 0), q.type);
+                    this.hitEnemy(target, q.damage, q.type);
                 if (q.type === 'blast_arrow')
                     for (const e of [...s.enemies])
                         if (e !== target && distance(e, target) < 3)

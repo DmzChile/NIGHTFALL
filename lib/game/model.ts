@@ -1,3 +1,4 @@
+import { starterRecipes, discoverItems, ensureProgression, recipeUnlocked } from './progression';
 import { validateWorldState } from './validation';
 import { ITEMS, MONSTERS, NODES, day, tierCap, type Recipe } from './data';
 export type Stack = {
@@ -55,6 +56,14 @@ export type Enemy = {
     skill: number;
     slow: number;
     vulnerable?: number;
+    poison?: number;
+    burn?: number;
+    dotTick?: number;
+    region?: string;
+    lootGear?: {
+        id: string;
+        dur: number;
+    }[];
 };
 export type Projectile = {
     id: string;
@@ -117,6 +126,16 @@ export type State = {
         healLeft: number;
         healRate: number;
         bed: string | null;
+        poisonResist?: number;
+        staminaAt?: number;
+        stagger?: number;
+        fishing?: {
+            uid: string;
+            x: number;
+            z: number;
+            remaining: number;
+            success: boolean;
+        };
     };
     nodes: NodeState[];
     buildings: Building[];
@@ -131,6 +150,9 @@ export type State = {
     lastBlood: number;
     quests: string[];
     discovered: string[];
+    knownItems?: string[];
+    unlockedRecipes?: string[];
+    regionNext?: Record<string, number>;
 };
 export const uuid = () => globalThis.crypto.randomUUID();
 export function hash(seed: string) {
@@ -216,10 +238,13 @@ export function normalizeSlots(s: State) {
             s.player.hotbar[i] = null;
     if (!s.player.items.some(it => it.uid === s.player.armor))
         s.player.armor = null;
+    if (s.player.fishing && !s.player.items.some(it => it.uid === s.player.fishing!.uid && it.id === 'fishing_rod'))
+        s.player.fishing = undefined;
 }
 export function addItem(s: State, id: string, qty: number) {
     const ok = give(s.player.items, id, qty, capacity(s));
     if (ok) {
+        discoverItems(s);
         const i = s.player.items.find(i => i.id === id);
         if (i && !s.player.hotbar.includes(i.uid) && ['tool', 'weapon', 'food', 'building', 'potion'].includes(ITEMS[id].kind)) {
             const n = s.player.hotbar.indexOf(null);
@@ -230,7 +255,7 @@ export function addItem(s: State, id: string, qty: number) {
     return ok;
 }
 export function createWorld(name: string, seed: string, difficulty: State['difficulty'] = 'normal', mode: State['mode'] = 'normal'): State {
-    const s: State = { formatVersion: 1, contentVersion: 1, generatorVersion: 1, id: uuid(), name: name.slice(0, 40) || '새로운 섬', seed: seed.slice(0, 64) || uuid().slice(0, 8), difficulty, mode, status: 'alive', time: 0, tick: 0, rng: 1, created: Date.now(), generation: 0, player: { x: 0, z: 8, y: 0, vy: 0, yaw: 0, pitch: 0, hp: 100, hunger: 100, stamina: 100, items: [], hotbar: Array(8).fill(null), selected: 0, armor: null, hitAt: -10, actionAt: -10, potionAt: -20, foodAt: -3, dodgeUntil: 0, poison: 0, curse: 0, slow: 0, healLeft: 0, healRate: 0, bed: null }, nodes: [], buildings: [], enemies: [], projectiles: [], drops: [], previousKills: 0, kills: {}, nightPlan: [], nightWave: 0, blood: false, lastBlood: 0, quests: [], discovered: ['초원'] };
+    const s: State = { formatVersion: 1, contentVersion: 1, generatorVersion: 1, id: uuid(), name: name.slice(0, 40) || '새로운 섬', seed: seed.slice(0, 64) || uuid().slice(0, 8), difficulty, mode, status: 'alive', time: 0, tick: 0, rng: 1, created: Date.now(), generation: 0, player: { x: 0, z: 8, y: 0, vy: 0, yaw: 0, pitch: 0, hp: 100, hunger: 100, stamina: 100, items: [], hotbar: Array(8).fill(null), selected: 0, armor: null, hitAt: -10, actionAt: -10, potionAt: -20, foodAt: -3, dodgeUntil: 0, poison: 0, curse: 0, slow: 0, healLeft: 0, healRate: 0, bed: null }, nodes: [], buildings: [], enemies: [], projectiles: [], drops: [], previousKills: 0, kills: {}, nightPlan: [], nightWave: 0, blood: false, lastBlood: 0, quests: [], discovered: ['초원'], knownItems: [], unlockedRecipes: starterRecipes(), regionNext: {} };
     s.rng = hash(s.seed);
     const gen = { rng: hash(s.seed + 'world') };
     const node = (kind: string, x: number, z: number) => s.nodes.push({ id: `node-${s.nodes.length}`, kind, x, z, hp: NODES[kind].hp, depleted: false, readyAt: 0 });
@@ -275,6 +300,15 @@ export function makeEnemy(s: State, kind: string, tier: number, x: number, z: nu
     const d = MONSTERS[kind], k = tier - d.min;
     const hp = Math.round(d.hp * (1 + .18 * k) * (s.difficulty === 'easy' ? .9 : s.difficulty === 'hard' ? 1.1 : 1));
     const loot = { ...d.loot };
+    let lootGear: Enemy["lootGear"];
+    if (kind === "archer") {
+        delete loot.wood;
+        delete loot.rope;
+        if (random(s) < .8)
+            loot.broken_bow = 1;
+        else
+            lootGear = [{ id: "bow", dur: 45 }];
+    }
     if (kind === 'golem' && random(s) < .15)
         loot.golem_core = 1;
     if (kind === 'wizard') {
@@ -286,7 +320,7 @@ export function makeEnemy(s: State, kind: string, tier: number, x: number, z: nu
         const choice = pools[Math.floor(random(s) * pools.length)];
         loot[choice] = (loot[choice] || 0) + (choice.includes('crystal') || choice.includes('mithril') ? 1 : 2);
     }
-    return { id: uuid(), kind, tier, x, z, hp, maxhp: hp, state: 'chase', timer: 0, loot, animal, summon, night: day(s.time), skill: 0, slow: 0 };
+    return { id: uuid(), kind, tier, x, z, hp, maxhp: hp, state: 'chase', timer: 0, loot, animal, summon, night: day(s.time), skill: 0, slow: 0, ...(lootGear ? { lootGear } : {}) };
 }
 export function stationFor(s: State, station: string, chosen?: string) {
     if (station === 'hand')
@@ -294,6 +328,9 @@ export function stationFor(s: State, station: string, chosen?: string) {
     return s.buildings.find(b => (b.kind === station || (station === 'furnace' && b.kind === 'advanced_furnace')) && distance(b, s.player) <= 3.5 && (!chosen || b.id === chosen));
 }
 export function craft(s: State, r: Recipe, chosen?: string): string | null {
+    discoverItems(s);
+    if (!recipeUnlocked(s, r))
+        return "아직 발견하지 않은 재료가 있는 제작법입니다.";
     const b = stationFor(s, r.station, chosen);
     if (r.station !== 'hand' && !b)
         return '해당 제작 시설에서 3m 안으로 이동하세요.';
@@ -310,6 +347,7 @@ export function craft(s: State, r: Recipe, chosen?: string): string | null {
     else if (!give(copy, r.output, r.qty, capacity(s)))
         return '인벤토리 공간이 부족합니다.';
     s.player.items = copy;
+    discoverItems(s);
     normalizeSlots(s);
     if (!r.seconds) {
         const it = s.player.items.find(i => i.id === r.output);
@@ -383,6 +421,7 @@ export function transactTransfer(from: Stack[], to: Stack[], uid: string, cap: n
 }
 export function validateState(v: unknown): State {
     const s = validateWorldState(v);
+    ensureProgression(s);
     normalizeSlots(s);
     return s;
 }

@@ -39,6 +39,7 @@ for (const [material, level, durability, damage] of [['stone', 1, 80, 12], ['iro
     add(`${material}_sword`, `${label} ${material === 'stone' ? '창' : '검'}`, '⚔', 'weapon', { level, durability, damage, interval: material === 'stone' ? .9 : .65, range: material === 'stone' ? 2.7 : 2 });
     add(`${material}_armor`, `${label} 갑옷`, '🛡', 'armor', { armor: level * 8, durability });
 }
+add('broken_bow', '부서진 활', '🏹', 'material', { max: 10, description: '제작대에서 복원하거나 통나무로 분해할 수 있습니다.' });
 add('club', '철 둔기', '🔨', 'weapon', { damage: 28, interval: 1.1, range: 2, durability: 180 });
 add('obsidian_knife', '흑요석 칼', '🗡', 'weapon', { damage: 24, interval: .45, range: 1.6, durability: 70 });
 add('bow', '기본 활', '🏹', 'weapon', { damage: 14, interval: .8, durability: 180 });
@@ -119,6 +120,7 @@ recipe('purify', { herb: 2, silver: 1 }, 'alchemy');
 recipe('magic_stone', { crystal: 1, coal: 1 }, 'alchemy', 3);
 recipe('fire_staff', { hardwood: 5, crystal: 4, ember_core: 1 }, 'magicbench');
 recipe('frost_staff', { hardwood: 5, crystal: 4, frost_shard: 1 }, 'magicbench');
+RECIPES.push({ id: 'restore_bow', output: 'bow', qty: 1, inputs: { broken_bow: 1, wood: 3, rope: 2 }, station: 'workbench', seconds: 0, category: 'weapon' }, { id: 'salvage_bow', output: 'wood', qty: 1, inputs: { broken_bow: 1 }, station: 'hand', seconds: 0, category: 'material' });
 export type MonsterDef = {
     name: string;
     min: number;

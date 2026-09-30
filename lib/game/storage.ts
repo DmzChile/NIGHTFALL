@@ -336,6 +336,8 @@ export async function importFile(file: File) {
     for (const arr of [s.player.items, ...s.buildings.map(b => b.items), ...s.drops.map(d => d.items)])
         for (const it of arr)
             it.uid = id(it.uid);
+    if (s.player.fishing)
+        s.player.fishing.uid = id(s.player.fishing.uid);
     s.player.hotbar = s.player.hotbar.map(uid => uid ? id(uid) : null);
     if (s.player.armor)
         s.player.armor = id(s.player.armor);

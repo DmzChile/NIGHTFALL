@@ -1,5 +1,6 @@
 import { ITEMS, MONSTERS, NODES, RECIPES } from './data';
 import type { State, Stack } from './model';
+import { REGIONS } from './regions';
 const record = (v: unknown): v is Record<string, unknown> => v !== null && typeof v === 'object' && !Array.isArray(v);
 const finite = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
 const integer = (v: unknown): v is number => finite(v) && Number.isSafeInteger(v) && v >= 0;
@@ -25,6 +26,10 @@ export function validateWorldState(value: unknown): State {
         requireValid(finite(p[key]), '플레이어 상태가 잘못되었습니다.');
     for (const key of ['hp', 'hunger', 'stamina'] as const)
         requireValid(p[key] >= 0 && p[key] <= 100, '플레이어 수치가 범위를 벗어났습니다.');
+    if(p.staminaAt!==undefined)requireValid(finite(p.staminaAt)&&p.staminaAt>=0&&p.staminaAt<=s.time,'스태미나 회복 시간이 잘못되었습니다.');
+    for (const [key, max] of [['poisonResist', 10], ['stagger', .6]] as const)
+        if (p[key] !== undefined)
+            requireValid(finite(p[key]) && p[key]! >= 0 && p[key]! <= max, '상태이상 시간이 잘못되었습니다.');
     requireValid(Array.isArray(p.hotbar) && p.hotbar.length === 8 && p.hotbar.every(id => id === null || identity(id)) && integer(p.selected) && p.selected < 8 && (p.armor === null || identity(p.armor)) && (p.bed === null || identity(p.bed)), '퀵슬롯이 잘못되었습니다.');
     const stackIds = new Set<string>();
     const stacks = (items: Stack[], limit: number) => {
@@ -40,6 +45,16 @@ export function validateWorldState(value: unknown): State {
         }
     };
     stacks(p.items, 32);
+    if (p.fishing !== undefined) {
+        const f = p.fishing;
+        requireValid(record(f) && identity(f.uid) && p.items.some(it => it.uid === f.uid && it.id === 'fishing_rod') && finite(f.x) && finite(f.z) && Math.abs(f.x) <= 512 && Math.abs(f.z) <= 512 && finite(f.remaining) && f.remaining >= 0 && f.remaining <= 7 && typeof f.success === 'boolean', '낚시 작업이 잘못되었습니다.');
+    }
+    if (s.knownItems !== undefined)
+        requireValid(Array.isArray(s.knownItems) && s.knownItems.length <= Object.keys(ITEMS).length && new Set(s.knownItems).size === s.knownItems.length && s.knownItems.every(id => known(ITEMS, id)), '재료 발견 기록이 잘못되었습니다.');
+    if (s.unlockedRecipes !== undefined)
+        requireValid(Array.isArray(s.unlockedRecipes) && s.unlockedRecipes.length <= RECIPES.length && new Set(s.unlockedRecipes).size === s.unlockedRecipes.length && s.unlockedRecipes.every(id => RECIPES.some(r => r.id === id)), '제작법 해금 기록이 잘못되었습니다.');
+    if (s.regionNext !== undefined)
+        requireValid(record(s.regionNext) && Object.entries(s.regionNext).every(([region, at]) => REGIONS.includes(region) && finite(at) && at >= 0), '지역 스폰 시간이 잘못되었습니다.');
     const entityIds = new Set<string>();
     for (const entity of [...s.nodes, ...s.buildings, ...s.enemies, ...s.projectiles, ...s.drops, ...s.nightPlan]) {
         requireValid(record(entity) && identity(entity.id) && !entityIds.has(entity.id) && finite(entity.x) && finite(entity.z) && Math.abs(entity.x) <= 600 && Math.abs(entity.z) <= 600, '엔티티 참조가 잘못되었습니다.');
@@ -71,6 +86,13 @@ export function validateWorldState(value: unknown): State {
         const def = MONSTERS[e.kind];
         requireValid(integer(e.tier) && e.tier >= def.min && e.tier <= def.max && finite(e.hp) && finite(e.maxhp) && e.maxhp > 0 && e.hp <= e.maxhp && finite(e.timer) && finite(e.skill) && finite(e.slow) && ['chase', 'windup', 'recover'].includes(e.state) && typeof e.animal === 'boolean' && typeof e.summon === 'boolean' && integer(e.night) && (e.owner === undefined || identity(e.owner)) && (e.vulnerable === undefined || finite(e.vulnerable)), '적 상태가 잘못되었습니다.');
         requireValid(record(e.loot) && Object.entries(e.loot).every(([id, qty]) => known(ITEMS, id) && integer(qty) && qty > 0 && qty <= 100), '전리품이 잘못되었습니다.');
+        for (const [key, max] of [['poison', 5], ['burn', 4], ['dotTick', 1]] as const)
+            if (e[key] !== undefined)
+                requireValid(finite(e[key]) && e[key]! >= 0 && e[key]! <= max, '적 상태이상이 잘못되었습니다.');
+        if (e.region !== undefined)
+            requireValid(REGIONS.includes(e.region) && !e.animal && !def.boss && e.night === 0, '지역 몬스터가 잘못되었습니다.');
+        if (e.lootGear !== undefined)
+            requireValid(Array.isArray(e.lootGear) && e.lootGear.length <= 4 && e.lootGear.every(it => record(it) && known(ITEMS, it.id) && ITEMS[it.id].durability && finite(it.dur) && it.dur >= 0 && it.dur <= ITEMS[it.id].durability!), '장비 전리품이 잘못되었습니다.');
     }
     for (const d of s.drops) {
         stacks(d.items, 100);
