@@ -16,6 +16,8 @@ describe('sunlight, bounded shadows and water', () => {
         const noon = lightingState(celestialState(255)), dusk = lightingState(celestialState(475)), night = lightingState(celestialState(600));
         assert.ok(noon.keyColor.r > noon.keyColor.b); assert.ok(dusk.keyColor.b / dusk.keyColor.r < noon.keyColor.b / noon.keyColor.r);
         assert.ok(night.keyColor.b > night.keyColor.r); assert.ok(night.keyIntensity > 0 && night.keyIntensity < noon.keyIntensity);
+        assert.ok(noon.shadowIntensity > night.shadowIntensity); assert.ok(night.shadowRadius > noon.shadowRadius);
+        assert.ok(dusk.skyColor.b / dusk.skyColor.r < noon.skyColor.b / noon.skyColor.r);
         for (let t = 0; t <= 1440; t += 3) {
             const sky = celestialState(t), light = lightingState(sky);
             assert.ok(light.direction.y >= 0); assert.ok(Number.isFinite(light.keyIntensity));
@@ -26,6 +28,8 @@ describe('sunlight, bounded shadows and water', () => {
             assert.ok(Math.abs(a.keyIntensity - b.keyIntensity) < .00001);
             const ca = a.keyColor.clone().multiplyScalar(a.keyIntensity), cb = b.keyColor.clone().multiplyScalar(b.keyIntensity);
             assert.ok(Math.hypot(ca.r - cb.r, ca.g - cb.g, ca.b - cb.b) < .00001);
+            const fillA = a.skyColor.clone().multiplyScalar(a.ambientIntensity), fillB = b.skyColor.clone().multiplyScalar(b.ambientIntensity);
+            assert.ok(Math.hypot(fillA.r - fillB.r, fillA.g - fillB.g, fillA.b - fillB.b) < .00005);
         }
     });
     it('shadow focus stays on texel boundaries on slopes and at arbitrary world coordinates', () => {
@@ -48,6 +52,25 @@ describe('sunlight, bounded shadows and water', () => {
         lighting.configure(renderer, 'low'); assert.equal(released, 1); assert.equal(lighting.key.shadow.map, null); assert.equal(renderer.shadowMap.enabled, false);
         lighting.configure(renderer, 'medium'); assert.ok(lighting.key.castShadow); assert.equal(lighting.key.shadow.mapSize.x, 1024);
         assert.ok(lighting.key.shadow.camera.right - lighting.key.shadow.camera.left < 150); assert.equal(graphicsQuality('corrupt'), 'medium');
+        lighting.dispose();
+    });
+    it('clock changes keep readable night fill and softer moon shadows within the same shadow-map budget', () => {
+        const lighting = new SceneLighting(), renderer = { capabilities: { maxTextureSize: 2048 }, shadowMap: { enabled: false, type: THREE.PCFShadowMap, autoUpdate: true, needsUpdate: false } } as unknown as THREE.WebGLRenderer;
+        const camera = new THREE.PerspectiveCamera(); camera.position.set(0, 1.65, 0);
+        lighting.configure(renderer, 'medium');
+        lighting.update(renderer, camera, celestialState(255), false, false);
+        const noonShadow = lighting.key.shadow.intensity, noonRadius = lighting.key.shadow.radius;
+        for (const seconds of [0, 475, 510, 600, 690, 720, 255]) {
+            lighting.update(renderer, camera, celestialState(seconds), false, false);
+            assert.equal(lighting.key.shadow.mapSize.x, 1024); assert.equal(lighting.key.shadow.mapSize.y, 1024);
+            assert.equal(lighting.key.shadow.map, null); assert.ok(lighting.key.castShadow);
+            assert.ok(lighting.ambient.intensity >= .34 && lighting.ambient.intensity < .85);
+            if (seconds === 600) {
+                assert.ok(lighting.key.shadow.intensity < noonShadow);
+                assert.ok(lighting.key.shadow.radius > noonRadius);
+                assert.ok(lighting.key.color.b > lighting.key.color.r);
+            }
+        }
         lighting.dispose();
     });
     it('pausing does not regenerate shadows; moving or changing quality invalidates them', () => {
