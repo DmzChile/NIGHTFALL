@@ -293,7 +293,7 @@ function App() {
         </> : <><h2>조작법</h2><Controls /><button className="btn wide" onClick={() => setMenu('home')}>메인 메뉴로</button></>}
         {err && <p className="error" role="alert">{err}</p>}<p className="mobile-note">PC 키보드와 마우스가 필요한 게임입니다.</p>
         </div><div className="menu-footer"><span>낮에는 채집. 밤에는 생존.</span><span>LOCAL SAVE / v0.54.0</span></div></div>}
-        {menu === 'play' && s && p && e && <><GameHud engine={e} targetName={targetName} targetHelp={targetHelp} onSelectSlot={index => { p.selected = index; rerender(); }} /><div className="damage-flash" style={{ opacity: flash }}/>
+        {menu === 'play' && s && p && e && <><GameHud engine={e} targetName={targetName} targetHelp={targetHelp} onSelectSlot={index => e.selectSlot(index)} /><div className="damage-flash" style={{ opacity: flash }}/>
         <Dialog open={e.paused && e.panel !== null} onOpenChange={open => {
         if (!open && !busy && s.status === 'alive')
             void scene.current?.play();

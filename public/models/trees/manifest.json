@@ -1,0 +1,34 @@
+{
+  "source": "locally-authored",
+  "generator": "scripts/generate-tree-models.mjs",
+  "reason": "Meshy API rejected generation for the free plan; user selected locally authored GLB assets.",
+  "textures": 0,
+  "animations": 0,
+  "foliageMask": "_FOLIAGE",
+  "models": [
+    {
+      "species": "pine",
+      "path": "/models/trees/pine.glb",
+      "triangles": 908,
+      "bytes": 110168
+    },
+    {
+      "species": "oak",
+      "path": "/models/trees/oak.glb",
+      "triangles": 1032,
+      "bytes": 125044
+    },
+    {
+      "species": "birch",
+      "path": "/models/trees/birch.glb",
+      "triangles": 1056,
+      "bytes": 127928
+    },
+    {
+      "species": "maple",
+      "path": "/models/trees/maple.glb",
+      "triangles": 1032,
+      "bytes": 125052
+    }
+  ]
+}

@@ -67,6 +67,7 @@ export class GameScene {
         this.host.appendChild(this.renderer.domElement);
         this.scene.fog = new THREE.FogExp2(0xaac3bb, .0065);
         this.scene.add(this.ambient, this.sun, this.sun.target, this.root, this.trees.root, this.camera);
+        void this.trees.loadModels().then(() => { if (!this.disposed) this.lighting.invalidate(); });
         this.sun.position.set(-30, 60, -20);
         const g = new THREE.PlaneGeometry(TERRAIN_SIZE, TERRAIN_SIZE, TERRAIN_SEGMENTS, TERRAIN_SEGMENTS);
         g.rotateX(-Math.PI / 2);
@@ -353,10 +354,7 @@ export class GameScene {
                 engine.pause();
             if (e.code.startsWith('Digit')) {
                 const n = +e.code.slice(5) - 1;
-                if (n >= 0 && n < 8) {
-                    engine.state.player.selected = n;
-                    engine.onChange();
-                }
+                engine.selectSlot(n);
             }
             if (!engine.paused)
                 engine.keys.add(e.code);
@@ -395,8 +393,7 @@ export class GameScene {
         this.renderer.domElement.addEventListener('contextmenu', e => e.preventDefault(), sig);
         this.renderer.domElement.addEventListener('wheel', e => {
             if (this.engine && !this.engine.paused) {
-                this.engine.state.player.selected = (this.engine.state.player.selected + (e.deltaY > 0 ? 1 : 7)) % 8;
-                this.engine.onChange();
+                this.engine.selectSlot((this.engine.state.player.selected + (e.deltaY > 0 ? 1 : 7)) % 8);
             }
         }, { ...sig, passive: true });
         document.addEventListener('visibilitychange', () => {

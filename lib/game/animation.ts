@@ -70,7 +70,11 @@ export class MotionSample {
     constructor(public x: number, public z: number, public time: number) {
     }
     update(x: number, z: number, time: number) {
-        if (time <= this.time)
+        if (time < this.time) {
+            this.x = x; this.z = z; this.time = time; this.speed = 0;
+            return;
+        }
+        if (time === this.time)
             return;
         const dx = x - this.x, dz = z - this.z, distance = Math.hypot(dx, dz);
         this.speed = distance > 8 ? 0 : Math.min(12, distance / (time - this.time));
