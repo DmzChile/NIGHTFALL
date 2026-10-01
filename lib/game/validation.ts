@@ -1,6 +1,7 @@
 import { ITEMS, MONSTERS, NODES, RECIPES } from './data';
 import type { State, Stack } from './model';
 import { REGIONS } from './regions';
+import { LOST_TARGET_SECONDS } from './awareness';
 import { isTree, nodeDefinition, TREE_SIZES, TREE_SPECIES } from './woodland';
 const record = (v: unknown): v is Record<string, unknown> => v !== null && typeof v === 'object' && !Array.isArray(v);
 const finite = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
@@ -93,6 +94,7 @@ export function validateWorldState(value: unknown): State {
     for (const e of [...s.enemies, ...s.nightPlan]) {
         requireValid(known(MONSTERS, e.kind), '적 종류가 잘못되었습니다.');
         const def = MONSTERS[e.kind];
+        requireValid((e.alerted === undefined || typeof e.alerted === 'boolean') && (e.lostFor === undefined || (finite(e.lostFor) && e.lostFor >= 0 && e.lostFor <= LOST_TARGET_SECONDS)) && (e.alerted !== false || !e.lostFor) && (!e.animal || (!e.alerted && !e.lostFor)), '적 식별 상태가 잘못되었습니다.');
         requireValid(integer(e.tier) && e.tier >= def.min && e.tier <= def.max && finite(e.hp) && finite(e.maxhp) && e.maxhp > 0 && e.hp <= e.maxhp && finite(e.timer) && finite(e.skill) && finite(e.slow) && ['chase', 'windup', 'recover'].includes(e.state) && typeof e.animal === 'boolean' && typeof e.summon === 'boolean' && integer(e.night) && (e.owner === undefined || identity(e.owner)) && (e.vulnerable === undefined || finite(e.vulnerable)), '적 상태가 잘못되었습니다.');
         requireValid(record(e.loot) && Object.entries(e.loot).every(([id, qty]) => known(ITEMS, id) && integer(qty) && qty > 0 && qty <= 100), '전리품이 잘못되었습니다.');
         for (const [key, max] of [['poison', 5], ['burn', 4], ['dotTick', 1]] as const)

@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { CloudLayer } from './atmosphere';
 
 /** The orbit follows simulation time, including the existing unequal day/night lengths. */
 export function celestialState(seconds: number) {
@@ -13,6 +14,7 @@ export function celestialState(seconds: number) {
 export class SkyBackdrop {
     scene = new THREE.Scene();
     camera = new THREE.PerspectiveCamera(72, 1, .1, 400);
+    clouds = new CloudLayer();
     sun = new THREE.Mesh(new THREE.SphereGeometry(6.5, 24, 16), new THREE.MeshBasicMaterial({ color: 0xffdc8c, fog: false, toneMapped: false }));
     moon = new THREE.Mesh(new THREE.SphereGeometry(5.3, 24, 16), new THREE.MeshBasicMaterial({ color: 0xdbe7ed, fog: false, toneMapped: false }));
     glow = new THREE.Mesh(new THREE.PlaneGeometry(32, 32), new THREE.ShaderMaterial({
@@ -27,11 +29,12 @@ void main() {
     #include <colorspace_fragment>
 }`
     }));
-    constructor() { this.scene.add(this.sun, this.moon, this.glow); }
+    constructor() { this.scene.add(this.sun, this.moon, this.glow, this.clouds.mesh); }
     update(camera: THREE.PerspectiveCamera, seconds: number, blood: boolean) {
         const sky = celestialState(seconds);
         this.camera.aspect = camera.aspect; this.camera.fov = camera.fov; this.camera.quaternion.copy(camera.quaternion); this.camera.updateProjectionMatrix();
         this.scene.background = sky.color;
+        this.clouds.update(seconds, sky.daylight);
         this.sun.position.copy(sky.sun).multiplyScalar(180); this.moon.position.copy(sky.moon).multiplyScalar(180);
         this.sun.visible = sky.sunVisible; this.moon.visible = sky.moonVisible;
         this.moon.material.color.set(blood ? 0xdf897c : 0xdbe7ed);
@@ -47,6 +50,7 @@ void main() {
         } finally { renderer.autoClear = autoClear; }
     }
     dispose() {
+        this.clouds.dispose();
         for (const object of [this.sun, this.moon, this.glow]) { object.geometry.dispose(); object.material.dispose(); }
         this.scene.clear();
     }

@@ -5,6 +5,7 @@ import { discoverItems, ensureProgression } from './progression';
 import { REGION_ENEMIES, regionWarning } from './regions';
 import { segmentSphere } from './collision';
 import { SaveQueue } from './save-queue';
+import { alertEnemy, ensureAwareness, updateAwareness } from './awareness';
 import { ITEMS, MONSTERS, RECIPES, day, phase, type Recipe } from './data';
 import { addItem, capacity, count, craft, distance, height, normalizeSlots, makeEnemy, random, planNight, give, take, selected, stationFor, transactTransfer, uuid, biome, type State, type Building, type Stack, type Enemy } from './model';
 import { SaveManager, exportFile } from './storage';
@@ -59,6 +60,7 @@ export class Engine {
         migrateTerrain(s);
         ensureForest(s, biome);
         ensureProgression(s);
+        ensureAwareness(s);
         this.state = s;
         this.lastStamina = s.player.staminaAt ?? 0;
         this.storage = storage;
@@ -511,6 +513,8 @@ export class Engine {
             e.burn = 4;
         if (type === 'fire_staff' && e.kind === 'ember')
             damage *= .5;
+        if (type !== 'dot' && (damage > 0 || type === 'poison_arrow' || type === 'frost_staff' || (type === 'fire_staff' && e.kind !== 'ember')))
+            alertEnemy(e);
         e.hp -= damage > 0 ? Math.max(1, Math.round(damage)) : 0;
         if (damage > 0)
             this.visual({ type: 'enemy-hit', id: e.id, x: e.x, z: e.z, dead: e.hp <= 0 });
@@ -880,20 +884,8 @@ export class Engine {
                         continue;
                 }
             }
-            if (dist > 130)
-                continue;
             if (e.summon && e.owner && !s.enemies.some(x => x.id === e.owner)) {
                 s.enemies = s.enemies.filter(x => x !== e);
-                continue;
-            }
-            e.slow = Math.max(0, e.slow - dt);
-            e.skill -= dt;
-            if (e.animal) {
-                e.timer -= dt;
-                const a = e.timer > 0 ? Math.atan2(e.z - p.z, e.x - p.x) : s.time * .12 + parseInt(e.id.slice(0, 2), 16);
-                const speed = e.timer > 0 ? d.speed * 1.8 : d.speed * .15;
-                e.x += Math.cos(a) * speed * dt;
-                e.z += Math.sin(a) * speed * dt;
                 continue;
             }
             if (d.boss && dist > 60) {
@@ -901,6 +893,19 @@ export class Engine {
                 this.notify('수호자 전투 지역을 벗어났습니다.');
                 continue;
             }
+            e.slow = Math.max(0, e.slow - dt);
+            e.skill -= dt;
+            if (e.animal) {
+                if (dist > 130) continue;
+                e.timer -= dt;
+                const a = e.timer > 0 ? Math.atan2(e.z - p.z, e.x - p.x) : s.time * .12 + parseInt(e.id.slice(0, 2), 16);
+                const speed = e.timer > 0 ? d.speed * 1.8 : d.speed * .15;
+                e.x += Math.cos(a) * speed * dt;
+                e.z += Math.sin(a) * speed * dt;
+                continue;
+            }
+            if (!updateAwareness(e, dist, dt) || dist > 130)
+                continue;
             if (e.state === 'windup') {
                 e.timer -= dt;
                 if (e.timer <= 0) {
@@ -997,8 +1002,10 @@ export class Engine {
                     p.curse = 8;
             }
             else if (target) {
-                if (q.type === 'pain')
+                if (q.type === 'pain') {
                     target.vulnerable = s.time + (MONSTERS[target.kind].boss ? 5 : 8);
+                    alertEnemy(target);
+                }
                 else
                     this.hitEnemy(target, q.damage, q.type);
                 if (q.type === 'blast_arrow')

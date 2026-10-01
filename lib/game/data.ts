@@ -130,29 +130,30 @@ export type MonsterDef = {
     speed: number;
     color: number;
     role: 'melee' | 'ranged' | 'magic';
+    detectRadius: number;
     loot: Record<string, number>;
     boss?: boolean;
 };
 export const MONSTERS: Record<string, MonsterDef> = {
-    zombie: { name: 'Zombie', min: 1, max: 5, hp: 35, damage: 8, speed: 1.8, color: 0x65926a, role: 'melee', loot: { rotten: 1 } },
-    archer: { name: 'Infected Archer', min: 2, max: 7, hp: 30, damage: 8, speed: 2.2, color: 0xab9580, role: 'ranged', loot: { wood: 1, rope: 1 } },
-    slime: { name: 'Slime', min: 1, max: 4, hp: 25, damage: 6, speed: 1.5, color: 0x82c17a, role: 'melee', loot: { slime: 2 } },
-    wolf: { name: 'Night Wolf', min: 2, max: 6, hp: 45, damage: 10, speed: 3.8, color: 0x4e5863, role: 'melee', loot: { leather: 2, fang: 1 } },
-    guard: { name: 'Bone Guard', min: 3, max: 7, hp: 60, damage: 12, speed: 1.7, color: 0xbac2bc, role: 'melee', loot: { bone: 3 } },
-    spider: { name: 'Venom Spider', min: 3, max: 8, hp: 35, damage: 7, speed: 3, color: 0x8c609b, role: 'melee', loot: { toxic: 2, fiber: 2 } },
-    golem: { name: 'Stone Golem', min: 4, max: 9, hp: 130, damage: 20, speed: 1.3, color: 0x7a8582, role: 'melee', loot: { stone: 6 } },
-    ember: { name: 'Ember Spirit', min: 4, max: 8, hp: 45, damage: 12, speed: 2.5, color: 0xe69554, role: 'magic', loot: { ember_core: 1 } },
-    frost: { name: 'Frost Wraith', min: 5, max: 9, hp: 45, damage: 10, speed: 2.5, color: 0x75bec7, role: 'magic', loot: { frost_shard: 1 } },
-    wizard: { name: 'Wizard', min: 4, max: 10, hp: 70, damage: 10, speed: 2, color: 0x9883c0, role: 'magic', loot: { heal: 1 } },
-    priest: { name: 'Hex Priest', min: 6, max: 10, hp: 80, damage: 8, speed: 2, color: 0xa576b5, role: 'magic', loot: { purify_shard: 2 } },
-    brute: { name: 'Siege Brute', min: 6, max: 10, hp: 150, damage: 18, speed: 1.4, color: 0x8a765f, role: 'melee', loot: { iron: 2, leather: 2 } },
-    cow: { name: '소', min: 1, max: 1, hp: 25, damage: 0, speed: 1.2, color: 0xa88970, role: 'melee', loot: { raw_meat: 2, leather: 2 } },
-    sheep: { name: '양', min: 1, max: 1, hp: 20, damage: 0, speed: 1.4, color: 0xe3dfcb, role: 'melee', loot: { raw_meat: 2, wool: 2 } },
-    bird: { name: '새', min: 1, max: 1, hp: 8, damage: 0, speed: 2, color: 0xb38b67, role: 'melee', loot: { feather: 3 } },
-    forest_boss: { name: '숲의 수호자', min: 1, max: 1, hp: 700, damage: 18, speed: 2.8, color: 0x785a3e, role: 'melee', loot: { leather: 10, fang: 4 }, boss: true },
-    rock_boss: { name: '암석 수호자', min: 1, max: 1, hp: 1000, damage: 24, speed: 1.3, color: 0x788785, role: 'melee', loot: { golem_core: 1 }, boss: true },
-    ruin_boss: { name: '유적 수호자', min: 1, max: 1, hp: 800, damage: 18, speed: 2, color: 0xa191c7, role: 'magic', loot: { purify_shard: 3 }, boss: true },
-    night_boss: { name: '밤의 군주', min: 1, max: 1, hp: 1800, damage: 25, speed: 2.4, color: 0xa65163, role: 'magic', loot: { crystal: 10, mithril: 5 }, boss: true }
+    zombie: { name: 'Zombie', min: 1, max: 5, hp: 35, damage: 8, speed: 1.8, color: 0x65926a, detectRadius: 28, role: 'melee', loot: { rotten: 1 } },
+    archer: { name: 'Infected Archer', min: 2, max: 7, hp: 30, damage: 8, speed: 2.2, color: 0xab9580, detectRadius: 40, role: 'ranged', loot: { wood: 1, rope: 1 } },
+    slime: { name: 'Slime', min: 1, max: 4, hp: 25, damage: 6, speed: 1.5, color: 0x82c17a, detectRadius: 22, role: 'melee', loot: { slime: 2 } },
+    wolf: { name: 'Night Wolf', min: 2, max: 6, hp: 45, damage: 10, speed: 3.8, color: 0x4e5863, detectRadius: 42, role: 'melee', loot: { leather: 2, fang: 1 } },
+    guard: { name: 'Bone Guard', min: 3, max: 7, hp: 60, damage: 12, speed: 1.7, color: 0xbac2bc, detectRadius: 30, role: 'melee', loot: { bone: 3 } },
+    spider: { name: 'Venom Spider', min: 3, max: 8, hp: 35, damage: 7, speed: 3, color: 0x8c609b, detectRadius: 32, role: 'melee', loot: { toxic: 2, fiber: 2 } },
+    golem: { name: 'Stone Golem', min: 4, max: 9, hp: 130, damage: 20, speed: 1.3, color: 0x7a8582, detectRadius: 24, role: 'melee', loot: { stone: 6 } },
+    ember: { name: 'Ember Spirit', min: 4, max: 8, hp: 45, damage: 12, speed: 2.5, color: 0xe69554, detectRadius: 36, role: 'magic', loot: { ember_core: 1 } },
+    frost: { name: 'Frost Wraith', min: 5, max: 9, hp: 45, damage: 10, speed: 2.5, color: 0x75bec7, detectRadius: 36, role: 'magic', loot: { frost_shard: 1 } },
+    wizard: { name: 'Wizard', min: 4, max: 10, hp: 70, damage: 10, speed: 2, color: 0x9883c0, detectRadius: 38, role: 'magic', loot: { heal: 1 } },
+    priest: { name: 'Hex Priest', min: 6, max: 10, hp: 80, damage: 8, speed: 2, color: 0xa576b5, detectRadius: 38, role: 'magic', loot: { purify_shard: 2 } },
+    brute: { name: 'Siege Brute', min: 6, max: 10, hp: 150, damage: 18, speed: 1.4, color: 0x8a765f, detectRadius: 30, role: 'melee', loot: { iron: 2, leather: 2 } },
+    cow: { name: '소', min: 1, max: 1, hp: 25, damage: 0, speed: 1.2, color: 0xa88970, detectRadius: 0, role: 'melee', loot: { raw_meat: 2, leather: 2 } },
+    sheep: { name: '양', min: 1, max: 1, hp: 20, damage: 0, speed: 1.4, color: 0xe3dfcb, detectRadius: 0, role: 'melee', loot: { raw_meat: 2, wool: 2 } },
+    bird: { name: '새', min: 1, max: 1, hp: 8, damage: 0, speed: 2, color: 0xb38b67, detectRadius: 0, role: 'melee', loot: { feather: 3 } },
+    forest_boss: { name: '숲의 수호자', min: 1, max: 1, hp: 700, damage: 18, speed: 2.8, color: 0x785a3e, detectRadius: 60, role: 'melee', loot: { leather: 10, fang: 4 }, boss: true },
+    rock_boss: { name: '암석 수호자', min: 1, max: 1, hp: 1000, damage: 24, speed: 1.3, color: 0x788785, detectRadius: 60, role: 'melee', loot: { golem_core: 1 }, boss: true },
+    ruin_boss: { name: '유적 수호자', min: 1, max: 1, hp: 800, damage: 18, speed: 2, color: 0xa191c7, detectRadius: 60, role: 'magic', loot: { purify_shard: 3 }, boss: true },
+    night_boss: { name: '밤의 군주', min: 1, max: 1, hp: 1800, damage: 25, speed: 2.4, color: 0xa65163, detectRadius: 60, role: 'magic', loot: { crystal: 10, mithril: 5 }, boss: true }
 };
 export const NODES: Record<string, {
     name: string;

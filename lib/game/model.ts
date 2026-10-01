@@ -2,6 +2,7 @@ import { starterRecipes, discoverItems, ensureProgression, recipeUnlocked } from
 import { terrainHeight, migrateTerrain, TERRAIN_VERSION } from './terrain';
 import { ensureForest, isTree, nodeDefinition, treeTraits, type TreeTraits } from './woodland';
 import { validateWorldState } from './validation';
+import { ensureAwareness } from './awareness';
 import { ITEMS, MONSTERS, NODES, day, tierCap, type Recipe } from './data';
 export type Stack = {
     uid: string;
@@ -50,6 +51,8 @@ export type Enemy = {
     hp: number;
     maxhp: number;
     state: 'chase' | 'windup' | 'recover';
+    alerted?: boolean;
+    lostFor?: number;
     timer: number;
     loot: Record<string, number>;
     animal: boolean;
@@ -334,7 +337,7 @@ export function makeEnemy(s: State, kind: string, tier: number, x: number, z: nu
         const choice = pools[Math.floor(random(s) * pools.length)];
         loot[choice] = (loot[choice] || 0) + (choice.includes('crystal') || choice.includes('mithril') ? 1 : 2);
     }
-    return { id: uuid(), kind, tier, x, z, hp, maxhp: hp, state: 'chase', timer: 0, loot, animal, summon, night: day(s.time), skill: 0, slow: 0, ...(lootGear ? { lootGear } : {}) };
+    return { id: uuid(), kind, tier, x, z, hp, maxhp: hp, state: 'chase', alerted: false, lostFor: 0, timer: 0, loot, animal, summon, night: day(s.time), skill: 0, slow: 0, ...(lootGear ? { lootGear } : {}) };
 }
 export function stationFor(s: State, station: string, chosen?: string) {
     if (station === 'hand')
@@ -438,6 +441,7 @@ export function validateState(v: unknown): State {
     migrateTerrain(s);
     ensureForest(s, biome);
     ensureProgression(s);
+    ensureAwareness(s);
     normalizeSlots(s);
     return s;
 }

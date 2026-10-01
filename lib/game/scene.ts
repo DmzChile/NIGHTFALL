@@ -6,6 +6,7 @@ import { terrainVertexHeight, terrainColor, TERRAIN_SIZE, TERRAIN_SEGMENTS } fro
 import { createViewModel, viewModelTransform } from './viewmodel';
 import { TreeField } from './trees';
 import { SkyBackdrop } from './sky';
+import { fogDensity } from './atmosphere';
 import { isTree } from './woodland';
 import * as THREE from 'three';
 import { Engine } from './engine';
@@ -444,7 +445,7 @@ export class GameScene {
             motion.update(e.x, e.z, s.time);
             const rig = this.rigs.get(g)!;
             const chasing = e.state === 'chase' || e.animal;
-            const facing = chasing && motion.speed > .05 ? motion.heading : Math.atan2(e.x - s.player.x, e.z - s.player.z);
+            const facing = chasing && motion.speed > .05 ? motion.heading : e.alerted ? Math.atan2(e.x - s.player.x, e.z - s.player.z) : g.rotation.y;
             const difference = Math.atan2(Math.sin(facing - g.rotation.y), Math.cos(facing - g.rotation.y));
             g.rotation.y += damp(0, difference, 12, dt);
             const def = MONSTERS[e.kind], total = e.state === 'windup' ? (def.boss ? 1.1 : def.role === 'melee' ? .6 : .8) : (def.boss ? 1.3 : 1);
@@ -527,7 +528,7 @@ export class GameScene {
         this.sun.intensity = .1 + daylight * 2.2;
         this.sun.target.position.copy(this.camera.position);
         this.sun.position.copy(this.camera.position).addScaledVector(daylight > .2 ? sky.sun : sky.moon, 90);
-        (this.scene.fog as THREE.FogExp2).density = .0055 + (1 - daylight) * .002;
+        (this.scene.fog as THREE.FogExp2).density = fogDensity(this.engine ? s.time : 430, daylight, biome(this.camera.position.x, this.camera.position.z), this.camera.position.y - 1.6);
     }
     loop = (stamp: number) => {
         if (this.disposed)
