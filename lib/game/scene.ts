@@ -379,9 +379,8 @@ export class GameScene {
         }, sig);
     }
     async play() {
-        if (!this.engine || this.contextLost)
+        if (!this.engine || this.contextLost || !this.engine.resume())
             return;
-        this.engine.resume();
         try {
             await this.renderer.domElement.requestPointerLock();
         }

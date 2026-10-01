@@ -8,8 +8,10 @@ export function celestialState(seconds: number) {
     const orbit = time < 510 ? time / 510 * Math.PI : Math.PI + (time - 510) / 210 * Math.PI;
     const sun = new THREE.Vector3(Math.cos(orbit), Math.sin(orbit) * .85, -.35).normalize();
     const moon = new THREE.Vector3(-sun.x, -sun.y, -sun.z);
+    const sunset = THREE.MathUtils.smoothstep(time, 420, 465) * (1 - THREE.MathUtils.smoothstep(time, 495, 535));
+    const horizon = new THREE.Color(0xaac3bb).lerp(new THREE.Color(0xc3aaa0), sunset);
     return { daylight, sun, moon, sunVisible: sun.y >= -.04, moonVisible: moon.y >= -.04,
-        color: new THREE.Color().lerpColors(new THREE.Color(0x10202f), new THREE.Color(time > 420 && time < 510 ? 0xc3aaa0 : 0xaac3bb), daylight) };
+        color: new THREE.Color().lerpColors(new THREE.Color(0x10202f), horizon, daylight) };
 }
 export class SkyBackdrop {
     scene = new THREE.Scene();

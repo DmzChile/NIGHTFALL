@@ -31,6 +31,7 @@ export class Engine {
     savedAt = 0;
     dirty = true;
     error = '';
+    saveAccessLost = false;
     onChange: () => void = () => {
     };
     onHit: () => void = () => {
@@ -56,6 +57,13 @@ export class Engine {
     private uiTick = 0;
     private lastStamina = 0;
     private attackPressed = false;
+    private handleLockLoss = () => {
+        if (this.disposed) return;
+        this.saveAccessLost = true;
+        this.pause('pause');
+        this.error = '월드 사용 권한이 변경되었습니다. 파일 백업 후 메뉴로 돌아가 다시 여세요.';
+        this.notify(this.error);
+    };
     constructor(s: State, storage: SaveManager) {
         migrateTerrain(s);
         ensureForest(s, biome);
@@ -67,11 +75,7 @@ export class Engine {
         this.panel = s.status === 'alive' ? 'pause' : 'death';
         if (s.generation > 0)
             this.saveLabel = '저장본 복원 완료';
-        this.storage.lockLost = () => {
-            this.pause('pause');
-            this.error = '월드 사용 권한이 변경되었습니다. 메뉴로 돌아가 다시 여세요.';
-            this.notify(this.error);
-        };
+        this.storage.lockLost = this.handleLockLoss;
     }
     notify(text: string) {
         this.notices.push({ id: Date.now() + Math.random(), text, until: Date.now() + 4200 });
@@ -88,11 +92,12 @@ export class Engine {
         this.onChange();
     }
     resume() {
-        if (this.state.status !== 'alive')
-            return;
+        if (this.disposed || this.saveAccessLost || this.state.status !== 'alive')
+            return false;
         this.panel = null;
         this.paused = false;
         this.onChange();
+        return true;
     }
     bind(uid: string) {
         const i = this.state.player.items.find(x => x.uid === uid);
@@ -111,7 +116,7 @@ export class Engine {
     }
     useItem(uid?: string) {
         const s = this.state, p = s.player, it = uid ? p.items.find(i => i.uid === uid) : selected(s);
-        if (!it)
+        if (!it || this.disposed || s.status !== 'alive')
             return;
         const d = ITEMS[it.id];
         if (!['food', 'potion'].includes(d.kind))
@@ -121,6 +126,8 @@ export class Engine {
                 return;
             p.foodAt = s.time;
             p.hunger = Math.min(100, p.hunger + (d.food || 0));
+            // Consume before damage so a lethal meal is not returned in the death bag.
+            take(p.items, it.id, 1);
             if ((d.heal || 0) < 0)
                 this.hurt(-d.heal!);
             else if (d.heal && p.healLeft < 5) {
@@ -131,7 +138,6 @@ export class Engine {
                 p.slow = Math.max(p.slow, 10);
                 this.notify('날고기를 먹고 탈이 났습니다.');
             }
-            take(p.items, it.id, 1);
             this.notify(`${d.name} 사용`);
         }
         else if (d.kind === 'potion') {
@@ -568,21 +574,21 @@ export class Engine {
         z: number;
     }) {
         const s = this.state, p = s.player;
-        if (s.status !== 'alive' || (direct && (s.time - p.hitAt < .25 || s.time < p.dodgeUntil)))
-            return;
+        if (s.status !== 'alive' || damage <= 0 || (direct && (s.time - p.hitAt < .25 || s.time < p.dodgeUntil)))
+            return false;
         const armor = p.items.find(i => i.uid === p.armor), def = armor && armor.dur !== 0 ? ITEMS[armor.id].armor || 0 : 0;
         let result = direct ? damage * 100 / (100 + def) * (p.curse > 0 ? 1.2 : 1) : damage;
         const held = selected(s);
         const dx = source ? source.x - p.x : 0, dz = source ? source.z - p.z : 0, l = Math.hypot(dx, dz);
         const facing = l > 0 && (-Math.sin(p.yaw) * dx - Math.cos(p.yaw) * dz) / l >= Math.cos(50 * Math.PI / 180);
         const twoHanded = held?.id.includes('bow') || held?.id.endsWith('_staff');
-        if (direct && this.blocking && facing && !twoHanded && s.time - p.actionAt >= .25 && p.items.some(i => i.id === 'shield' && (i.dur || 0) > 0)) {
+        const shield = p.items.find(i => i.id === 'shield' && (i.dur || 0) > 0);
+        if (direct && this.blocking && facing && !twoHanded && s.time - p.actionAt >= .25 && shield) {
             this.lastStamina = s.time;
             p.staminaAt = s.time;
             if (p.stamina >= 12) {
                 p.stamina -= 12;
                 result *= .3;
-                const shield = p.items.find(i => i.id === 'shield')!;
                 shield.dur = Math.max(0, (shield.dur || 0) - 1);
             }
             else {
@@ -602,6 +608,8 @@ export class Engine {
             }
         }
         if (p.hp <= 0) {
+            p.healLeft = 0;
+            p.healRate = 0;
             s.status = s.mode === 'permadeath' ? 'ended' : 'dead';
             if (s.mode === 'normal') {
                 s.drops.push({ id: uuid(), x: p.x, z: p.z, items: p.items.filter(i => i.uid !== p.armor), expires: 0, bag: true });
@@ -613,13 +621,14 @@ export class Engine {
             void this.save();
         }
         this.dirty = true;
+        return true;
     }
     respawn() {
         const s = this.state;
-        if (s.mode === 'permadeath')
+        if (this.disposed || s.mode === 'permadeath' || s.status !== 'dead')
             return;
         const bed = s.buildings.find(b => b.id === s.player.bed);
-        Object.assign(s.player, { x: bed?.x || 0, z: (bed?.z || 8) + 2, y: 0, vy: 0, hp: 50, hunger: 50, stamina: 100, poison: 0, curse: 0, slow: 0, stagger: 0, poisonResist: 0, fishing: undefined, healLeft: 0, dodgeUntil: s.time + 5 });
+        Object.assign(s.player, { x: bed?.x ?? 0, z: (bed?.z ?? 8) + 2, y: 0, vy: 0, hp: 50, hunger: 50, stamina: 100, poison: 0, curse: 0, slow: 0, stagger: 0, poisonResist: 0, fishing: undefined, healLeft: 0, dodgeUntil: s.time + 5 });
         s.enemies = s.enemies.filter(e => !MONSTERS[e.kind].boss);
         s.status = 'alive';
         this.panel = 'pause';
@@ -725,6 +734,14 @@ export class Engine {
     }
     private stepPlayer(dt: number) {
         const s = this.state, p = s.player;
+        const blocked = (x: number, z: number, swept = false) => {
+            const obstacle = (center: { x: number; z: number }, radius: number) =>
+                distance(center, { x, z }) < radius || (swept && distance(center, p) > radius && segmentSphere(
+                    { x: p.x, y: 0, z: p.z }, { x, y: 0, z }, { x: center.x, y: 0, z: center.z }, radius) !== null);
+            return Math.hypot(x, z) > 465
+                || s.nodes.some(n => !n.depleted && nodeRadius(n) > 0 && obstacle(n, nodeRadius(n) + .35))
+                || s.buildings.some(b => (['wall', 'chest', 'furnace', 'advanced_furnace', 'anvil'].includes(b.kind) || (swept && b.kind === 'door')) && obstacle(b, swept ? 1.2 : 1));
+        };
         let ix = (this.keys.has('KeyD') ? 1 : 0) - (this.keys.has('KeyA') ? 1 : 0), iz = (this.keys.has('KeyW') ? 1 : 0) - (this.keys.has('KeyS') ? 1 : 0);
         const norm = Math.hypot(ix, iz);
         if (norm && !(p.stagger || 0)) {
@@ -740,7 +757,6 @@ export class Engine {
                 p.staminaAt = s.time;
             }
             const nx = p.x + (Math.cos(p.yaw) * ix - Math.sin(p.yaw) * iz) * speed * dt, nz = p.z + (-Math.sin(p.yaw) * ix - Math.cos(p.yaw) * iz) * speed * dt;
-            const blocked = (x: number, z: number) => Math.hypot(x, z) > 465 || s.nodes.some(n => !n.depleted && nodeRadius(n) > 0 && distance(n, { x, z }) < nodeRadius(n) + .35) || s.buildings.some(b => ['wall', 'chest', 'furnace', 'advanced_furnace', 'anvil'].includes(b.kind) && distance(b, { x, z }) < 1);
             if (!blocked(nx, p.z))
                 p.x = nx;
             if (!blocked(p.x, nz))
@@ -760,7 +776,7 @@ export class Engine {
             this.lastStamina = s.time;
             p.staminaAt = s.time;
             const dx = p.x - Math.sin(p.yaw) * 1.3, dz = p.z - Math.cos(p.yaw) * 1.3;
-            if (Math.hypot(dx, dz) < 465 && !s.buildings.some(b => ['wall', 'door', 'chest'].includes(b.kind) && distance(b, { x: dx, z: dz }) < 1.2)) {
+            if (!blocked(dx, dz, true)) {
                 p.x = dx;
                 p.z = dz;
             }
@@ -772,11 +788,13 @@ export class Engine {
         p.poisonResist = Math.max(0, (p.poisonResist || 0) - dt);
         if (p.hunger === 0 && s.tick % 150 === 0)
             this.hurt(1, false);
+        if (s.status !== 'alive') return;
         if (p.poison > 0) {
             p.poison = Math.max(0, p.poison - dt);
             if (s.tick % 30 === 0)
                 this.hurt(2, false);
         }
+        if (s.status !== 'alive') return;
         p.curse = Math.max(0, p.curse - dt);
         p.slow = Math.max(0, p.slow - dt);
         if (p.healLeft > 0) {
@@ -915,8 +933,8 @@ export class Engine {
                         s.projectiles.push({ id: uuid(), x: e.x, y, z: e.z, vx: dx / l * 10, vy: dy / l * 10, vz: dz / l * 10, life: 5, damage: d.damage * (1 + .1 * (e.tier - d.min)), enemy: true, type: e.kind });
                     }
                     else if (dist < 2.8) {
-                        this.hurt(d.damage * (1 + .1 * (e.tier - d.min)) * (s.difficulty === 'easy' ? .8 : s.difficulty === 'hard' ? 1.2 : 1), true, e);
-                        if (e.kind === 'spider' && !(p.poisonResist || 0))
+                        const landed = this.hurt(d.damage * (1 + .1 * (e.tier - d.min)) * (s.difficulty === 'easy' ? .8 : s.difficulty === 'hard' ? 1.2 : 1), true, e);
+                        if (landed && s.status === 'alive' && e.kind === 'spider' && !(p.poisonResist || 0))
                             p.poison = 5;
                     }
                     e.state = 'recover';
@@ -949,6 +967,7 @@ export class Engine {
                     e.timer = d.boss ? 1.1 : d.role === 'melee' ? .6 : .8;
                 }
             }
+            if (s.status !== 'alive') return;
             if (e.kind === 'wizard' && e.skill <= 0 && dist < 22 && s.enemies.filter(x => x.owner === e.id).length < 3 && s.enemies.length < 40) {
                 const n = makeEnemy(s, 'zombie', Math.min(5, e.tier), e.x + 2, e.z, false, true);
                 n.owner = e.id;
@@ -995,10 +1014,10 @@ export class Engine {
                     }
                 }
             if (target === 'player') {
-                this.hurt(q.damage * (s.difficulty === 'easy' ? .8 : s.difficulty === 'hard' ? 1.2 : 1), true, prev);
-                if (q.type === 'frost')
+                const landed = this.hurt(q.damage * (s.difficulty === 'easy' ? .8 : s.difficulty === 'hard' ? 1.2 : 1), true, prev);
+                if (landed && s.status === 'alive' && q.type === 'frost')
                     p.slow = 3;
-                if (q.type === 'wizard')
+                if (landed && s.status === 'alive' && q.type === 'wizard')
                     p.curse = 8;
             }
             else if (target) {
@@ -1015,6 +1034,7 @@ export class Engine {
             }
             if (q.y < height(q.x, q.z) || q.life <= 0 || Math.hypot(q.x, q.z) > 490 || contact !== null)
                 s.projectiles = s.projectiles.filter(p => p !== q);
+            if (s.status !== 'alive') return;
         }
     }
     breakBuilding(b: Building) {
@@ -1066,7 +1086,7 @@ export class Engine {
         this.keys.clear();
         this.onVisual = () => {
         };
-        this.storage.lockLost = () => {
-        };
+        if (this.storage.lockLost === this.handleLockLoss)
+            this.storage.lockLost = () => {};
     }
 }

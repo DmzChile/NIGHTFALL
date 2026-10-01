@@ -65,6 +65,7 @@ export class SaveManager {
     lockRelease: (() => void) | null = null;
     lockLost: () => void = () => {
     };
+    private session = 0;
     async open() {
         if (this.db)
             return;
@@ -140,8 +141,9 @@ export class SaveManager {
             await this.release();
             throw e;
         }
+        const session = this.session;
         this.heartbeat = setInterval(() => {
-            this.lease(false).catch(() => this.lockLost());
+            this.lease(false).catch(() => { if (this.active === id && this.session === session) this.lockLost(); });
         }, 5000);
     }
     async lease(initial: boolean) {
@@ -171,6 +173,7 @@ export class SaveManager {
         });
     }
     async release() {
+        this.session++;
         if (this.heartbeat)
             clearInterval(this.heartbeat);
         this.heartbeat = null;
@@ -201,21 +204,23 @@ export class SaveManager {
     async save(s: State) {
         if (this.active !== s.id)
             throw new Error('월드 저장 권한이 없습니다.');
-        const expected = s.generation, copy = structuredClone(s);
+        const expected = s.generation, worldId = s.id, session = this.session, copy = structuredClone(s);
         copy.generation = expected + 1;
         const envelope = await pack(copy);
+        if (this.active !== worldId || this.session !== session || s.id !== worldId)
+            throw new Error('월드 저장 권한이 변경되었습니다.');
         await new Promise<void>((resolve, reject) => {
-            const tx = this.transaction(['worlds', 'snapshots'], 'readwrite'), worlds = tx.objectStore('worlds'), r = worlds.get(s.id);
+            const tx = this.transaction(['worlds', 'snapshots'], 'readwrite'), worlds = tx.objectStore('worlds'), r = worlds.get(worldId);
             let err: Error | null = null;
             r.onsuccess = () => {
                 const w = r.result as WorldInfo | undefined;
-                if (w && (w.generation !== expected || w.owner !== this.token || (w.lease || 0) < Date.now())) {
+                if (this.active !== worldId || this.session !== session || s.id !== worldId || (!w && expected !== 0) || (w && (w.generation !== expected || w.owner !== this.token || (w.lease || 0) < Date.now()))) {
                     err = new Error('다른 탭의 저장과 충돌했습니다. 월드를 다시 여세요.');
                     tx.abort();
                     return;
                 }
-                const info: WorldInfo = { id: s.id, name: copy.name, day: Math.floor(copy.time / 720) + 1, time: copy.time, saved: Date.now(), generation: copy.generation, mode: copy.mode, status: copy.status, seed: copy.seed, difficulty: copy.difficulty, owner: this.token, lease: Date.now() + 20000 };
-                tx.objectStore('snapshots').put({ worldId: s.id, generation: copy.generation, saved: info.saved, data: envelope });
+                const info: WorldInfo = { id: worldId, name: copy.name, day: Math.floor(copy.time / 720) + 1, time: copy.time, saved: Date.now(), generation: copy.generation, mode: copy.mode, status: copy.status, seed: copy.seed, difficulty: copy.difficulty, owner: this.token, lease: Date.now() + 20000 };
+                tx.objectStore('snapshots').put({ worldId, generation: copy.generation, saved: info.saved, data: envelope });
                 worlds.put(info);
             };
             tx.oncomplete = () => resolve();
@@ -224,7 +229,7 @@ export class SaveManager {
             };
         });
         s.generation = copy.generation;
-        await this.prune(s.id).catch(() => {
+        await this.prune(worldId).catch(() => {
         });
         return Date.now();
     }
