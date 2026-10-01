@@ -1,0 +1,53 @@
+.sandbox-tag { display:inline-block; padding:4px 8px; border:1px solid #6ba590; border-radius:4px; color:#c5ffe1; background:#214d40; font:600 .875rem/1.5 ui-monospace,monospace; }
+.hud .daypill { display:grid; gap:5px; }
+.mode-explanation.creative,.creative-item-note { color:#c0ead9; background:#16392f; border:1px solid #517f6b; border-radius:5px; padding:12px; font-size:.875rem; line-height:1.7; }
+.game-dialog .game-tabs { flex-wrap:wrap; }
+.sandbox-banner { display:flex; flex-wrap:wrap; align-items:flex-start; justify-content:space-between; gap:16px; padding:16px; border:1px solid #547968; border-radius:6px; background:#19372f; margin-bottom:18px; }
+.sandbox-banner>div { flex:1 1 18rem; min-width:0; }
+.sandbox-banner strong { font-size:1.125rem; color:#ecfaed; }
+.sandbox-banner p { margin:8px 0 0; font-size:1rem; line-height:1.7; color:#bed8c8; }
+.sandbox-banner .sandbox-tag { flex-shrink:0; }
+.creative-catalog,.console-shell { container-type:inline-size; }
+.catalog-toolbar { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; }
+.catalog-toolbar label:first-child { grid-column:1/-1; }
+.catalog-toolbar label { min-width:0; }
+.catalog-toolbar label { font-size:.875rem; color:#cbdccb; }
+.game-dialog .catalog-toolbar input,.game-dialog .catalog-toolbar select { display:block; width:100%; min-height:44px; margin-top:7px; border:1px solid #547065; border-radius:5px; padding:10px 12px; background:#0f2025; color:#eef8e9; font:1rem/1.5 Arial,sans-serif; }
+.catalog-count { margin:16px 0 12px; color:#bcd0c1; font-size:.875rem; line-height:1.6; }
+.catalog-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(min(100%,9.0625rem),1fr)); gap:10px; max-height:48vh; overflow-y:auto; align-content:start; padding:3px; margin:-3px -3px 16px; overscroll-behavior:contain; }
+.catalog-item { display:flex; flex-direction:column; align-items:stretch; min-width:0; text-align:left; padding:14px; border:1px solid #44695a; border-radius:6px; background:#11282a; color:#ecf5e7; }
+.catalog-item:hover { background:#264635; border-color:#bed8a6; }
+.catalog-item-top { display:flex; align-items:center; justify-content:space-between; gap:10px; color:#eac68e; font-size:.9375rem; }
+.catalog-item-top .itemicon { font-size:1.75rem; }
+.catalog-item strong { margin:10px 0 4px; font-size:1rem; line-height:1.5; overflow-wrap:anywhere; }
+.catalog-item code { font:.875rem/1.6 ui-monospace,monospace; color:#c8d4b3; overflow-wrap:anywhere; margin-bottom:7px; }
+.console-layout { display:grid; grid-template-columns:minmax(0,1fr); gap:22px; align-items:start; }
+.console-main { min-width:0; }
+.console-context { display:flex; flex-wrap:wrap; justify-content:space-between; gap:8px; margin:0 0 14px; font-size:.875rem; line-height:1.6; color:#c9daca; }
+.console-context span { color:#9cb9af; }
+.console-output { height:clamp(230px,38vh,380px); overflow-y:auto; border:1px solid #45665a; border-radius:6px; background:#091a21; padding:16px; font: .9375rem/1.75 ui-monospace,monospace; color:#d6e3d0; overscroll-behavior:contain; }
+.console-welcome { font-family:Arial,sans-serif; line-height:1.8; }
+.console-welcome strong { color:#eef6e8; font-size:1.125rem; }
+.console-welcome p { margin:10px 0; font-size:1rem; }
+.console-entry { padding:0 0 16px; margin-bottom:14px; border-bottom:1px solid #294b40; overflow-wrap:anywhere; }
+.console-entry:last-child { padding-bottom:0; margin-bottom:0; border-bottom:0; }
+.console-prompt { display:block; color:#f6cc87; margin-bottom:6px; white-space:pre-wrap; font:inherit; }
+.console-entry p { margin:3px 0; }
+.console-success { color:#c6e3c9; }
+.console-error { color:#ffbe9f; }
+.console-form { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:10px; margin-top:14px; }
+.game-dialog .console-form input { min-width:0; width:100%; padding:12px; border:1px solid #6ba388; border-radius:5px; color:#effadf; background:#102b27; font:1rem/1.5 ui-monospace,monospace; }
+.console-form .btn { min-height:48px; justify-content:center; }
+.command-suggestions { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:6px; margin-top:16px; }
+.command-suggestions button,.command-guide button { display:flex; flex-direction:column; align-items:flex-start; min-width:0; text-align:left; padding:10px 12px; background:#1b302e; border:1px solid #3f6354; border-radius:5px; color:#dbead7; }
+.command-suggestions button:hover,.command-guide button:hover { border-color:#d1b78b; background:#2b4032; }
+.command-suggestions code,.command-guide code { font:.875rem/1.6 ui-monospace,monospace; color:#f4d6a7; overflow-wrap:anywhere; white-space:normal; }
+.command-suggestions span,.command-guide span { font:.875rem/1.6 Arial,sans-serif; color:#bdd0c4; margin-top:4px; }
+.command-guide { min-width:0; border-top:1px solid #456253; padding-top:18px; display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; }
+.command-guide h3,.command-guide p { grid-column:1/-1; }
+.game-dialog .command-guide h3 { font-size:1rem; margin:0 0 8px; color:#ecf5e5; }
+.command-guide p { font-size:.875rem; color:#bed1c4; line-height:1.7; margin:0 0 14px; }
+.command-guide button { width:100%; margin:0; }
+@container(min-width:48rem) { .catalog-toolbar { grid-template-columns:minmax(0,1fr) 11.25rem 11.25rem; } .catalog-toolbar label:first-child { grid-column:auto; } }
+@container(min-width:54rem) { .console-layout { grid-template-columns:minmax(0,1fr) 17.875rem; } .command-guide { display:block; border-top:0; border-left:1px solid #456253; padding:0 0 0 20px; max-height:64vh; overflow-y:auto; } .command-guide button { margin-bottom:8px; } }
+@media(max-width:650px) { .sandbox-banner { flex-direction:column; padding:12px; } .sandbox-banner>div { flex-basis:auto; } .catalog-grid { grid-template-columns:repeat(auto-fill,minmax(min(100%,14rem),1fr)); } .catalog-item { padding:12px; } .command-suggestions,.command-guide { grid-template-columns:1fr; } .console-output { padding:12px; } .console-form { gap:6px; } .console-form .btn { padding:10px; } }

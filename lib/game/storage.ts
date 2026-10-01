@@ -7,6 +7,7 @@ export type WorldInfo = {
     saved: number;
     generation: number;
     mode: string;
+    gameMode?: State['gameMode'];
     status: string;
     seed: string;
     difficulty: string;
@@ -219,7 +220,7 @@ export class SaveManager {
                     tx.abort();
                     return;
                 }
-                const info: WorldInfo = { id: worldId, name: copy.name, day: Math.floor(copy.time / 720) + 1, time: copy.time, saved: Date.now(), generation: copy.generation, mode: copy.mode, status: copy.status, seed: copy.seed, difficulty: copy.difficulty, owner: this.token, lease: Date.now() + 20000 };
+                const info: WorldInfo = { id: worldId, name: copy.name, day: Math.floor(copy.time / 720) + 1, time: copy.time, saved: Date.now(), generation: copy.generation, mode: copy.mode, gameMode: copy.gameMode ?? 'survival', status: copy.status, seed: copy.seed, difficulty: copy.difficulty, owner: this.token, lease: Date.now() + 20000 };
                 tx.objectStore('snapshots').put({ worldId, generation: copy.generation, saved: info.saved, data: envelope });
                 worlds.put(info);
             };

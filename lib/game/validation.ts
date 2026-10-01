@@ -21,10 +21,12 @@ export function validateWorldState(value: unknown): State {
     requireValid(s.forestVersion === undefined || s.forestVersion === 1, '지원하지 않는 숲 버전입니다.');
     requireValid(identity(s.id) && typeof s.name === 'string' && s.name.length <= 40 && typeof s.seed === 'string' && s.seed.length <= 64 && finite(s.time) && s.time >= 0 && integer(s.tick) && integer(s.generation) && integer(s.rng) && s.rng <= 0xffffffff && finite(s.created), '월드 정보가 손상되었습니다.');
     requireValid(['easy', 'normal', 'hard'].includes(s.difficulty) && ['normal', 'permadeath'].includes(s.mode) && ['alive', 'dead', 'ended'].includes(s.status), '게임 모드가 잘못되었습니다.');
+    requireValid(s.gameMode === undefined || s.gameMode === 'survival' || s.gameMode === 'creative', '플레이 모드가 잘못되었습니다.');
     for (const key of ['nodes', 'buildings', 'enemies', 'projectiles', 'drops', 'nightPlan', 'quests', 'discovered'] as const)
         requireValid(Array.isArray(s[key]) && s[key].length <= 10000, '엔티티 수가 잘못되었습니다.');
     const p = s.player;
     requireValid(record(p) && finite(p.x) && finite(p.z) && finite(p.y) && Math.abs(p.x) <= 512 && Math.abs(p.z) <= 512, '플레이어 좌표가 잘못되었습니다.');
+    requireValid((p.flying === undefined || typeof p.flying === 'boolean') && (!p.flying || s.gameMode === 'creative'), '비행 상태가 잘못되었습니다.');
     for (const key of ['hp', 'hunger', 'stamina', 'vy', 'yaw', 'pitch', 'hitAt', 'actionAt', 'potionAt',
         'foodAt', 'dodgeUntil', 'poison', 'curse', 'slow', 'healLeft', 'healRate'] as const)
         requireValid(finite(p[key]), '플레이어 상태가 잘못되었습니다.');

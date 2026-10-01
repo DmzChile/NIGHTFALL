@@ -327,7 +327,9 @@ export class GameScene {
             const engine = this.engine;
             if (!engine)
                 return;
-            if (!engine.paused && ['Tab', 'Space', 'KeyM', 'ControlLeft'].includes(e.code) && !['INPUT', 'TEXTAREA'].includes((e.target as HTMLElement)?.tagName))
+            const target = e.target as HTMLElement | null;
+            if (target?.closest('input, textarea, select, [contenteditable="true"], [role="combobox"]')) return;
+            if (!engine.paused && ['Tab', 'Space', 'KeyM', 'ControlLeft', 'ControlRight', 'Slash'].includes(e.code))
                 e.preventDefault();
             if (e.repeat)
                 return;
@@ -339,6 +341,12 @@ export class GameScene {
                 engine.pause('map');
                 return;
             }
+            if (e.code === 'Slash' && !engine.paused) {
+                engine.pause('console');
+                return;
+            }
+            if (e.code === 'KeyF' && !engine.paused && engine.creative) engine.toggleFlight();
+            if (e.code === 'KeyR' && !engine.paused && engine.creative) engine.removeTarget();
             if (e.code === 'KeyE' && !engine.paused)
                 engine.interact();
             if (e.code === 'Escape' && !engine.paused)

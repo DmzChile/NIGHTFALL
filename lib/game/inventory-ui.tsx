@@ -1,7 +1,7 @@
 "use client";
 import { Progress } from '@/components/ui/progress';
 import { ITEMS } from './data';
-import { capacity, selected, type Stack, type State } from './model';
+import { capacity, isCreative, selected, type Stack, type State } from './model';
 
 const KIND_LABELS = { material: '제작 재료', food: '음식', tool: '도구', weapon: '무기', building: '설치 시설', armor: '방어구', potion: '물약 / 치료' };
 const number = (value: number) => Number(value.toFixed(2)).toString();
@@ -49,25 +49,26 @@ export function StackGrid({ items, state, selectedUid, onSelect }: { items: Stac
     })}{!items.length && <div className="inventory-empty"><strong>보관 중인 아이템이 없습니다.</strong><p>{items === state.player.items ? '주변의 가지와 작은 돌을 E로 주워 보세요.' : '이 보관 공간은 비어 있습니다.'}</p></div>}</div>;
 }
 
-export function InventoryView({ state, item, onSelect, onBind, onUse, onRepair }: { state: State; item?: Stack; onSelect: (item: Stack) => void; onBind: (uid: string) => void; onUse: (uid: string) => void; onRepair: (uid: string) => void }) {
+export function InventoryView({ state, item, onSelect, onBind, onUse, onRepair, onDiscard }: { state: State; item?: Stack; onSelect: (item: Stack) => void; onBind: (uid: string) => void; onUse: (uid: string) => void; onRepair: (uid: string) => void; onDiscard?: (uid: string) => void }) {
     const p = state.player, max = capacity(state), armor = p.items.find(i => i.uid === p.armor), held = selected(state);
     const defense = armor && armor.dur !== 0 ? ITEMS[armor.id].armor || 0 : 0;
     return <>
         <div className="inventory-summary">
-            <div><span>사용 중인 배낭 칸</span><strong>{p.items.length} <small>/ {max}</small></strong><p>{max - p.items.length}칸 남음 · 같은 아이템은 묶음으로 보관</p></div>
+            <div><span>사용 중인 배낭 칸</span><strong>{p.items.length} <small>/ {max}</small></strong><p>{p.items.length > max ? '가방 용량 초과 · 소지품을 정리하면 새 칸을 사용할 수 있습니다.' : `${max - p.items.length}칸 남음 · 같은 아이템은 묶음으로 보관`}</p></div>
             <div><span>착용한 방어구</span><strong className="summary-name">{armor ? ITEMS[armor.id].name : '착용 없음'}</strong><p>{armor?.dur === 0 ? '파손됨 · 방어 효과 없음' : `방어력 ${defense}`}</p></div>
             <div><span>선택한 퀵슬롯 · {p.selected + 1}번</span><strong className="summary-name">{held ? ITEMS[held.id].name : '빈 슬롯 / 맨손'}</strong><p>등록한 아이템은 이 슬롯에 들어갑니다.</p></div>
         </div>
         <div className="inventory-layout"><section className="inventory-list" aria-label="배낭 소지품"><div className="inventory-list-head"><h3>소지품</h3><span>아이템을 선택해 상세 정보 확인</span></div><StackGrid items={p.items} state={state} selectedUid={item?.uid} onSelect={onSelect} /></section>
-        <aside className="item-details" aria-label="선택한 아이템 정보">{item ? <ItemDetails state={state} item={item} onBind={onBind} onUse={onUse} onRepair={onRepair} /> : <div className="details-empty"><span aria-hidden="true">◇</span><h3>아이템 상세 정보</h3><p>아이템을 선택하면 능력치와 사용할 수 있는 동작이 표시됩니다.</p></div>}</aside></div>
+        <aside className="item-details" aria-label="선택한 아이템 정보">{item ? <ItemDetails state={state} item={item} onBind={onBind} onUse={onUse} onRepair={onRepair} onDiscard={onDiscard} /> : <div className="details-empty"><span aria-hidden="true">◇</span><h3>아이템 상세 정보</h3><p>아이템을 선택하면 능력치와 사용할 수 있는 동작이 표시됩니다.</p></div>}</aside></div>
         <p className="inventory-footnote"><kbd>1–8</kbd> 퀵슬롯 선택 <span>·</span> <kbd>Tab</kbd> 포커스 이동 <span>·</span> <kbd>Esc</kbd> 배낭 닫기</p>
     </>;
 }
 
-function ItemDetails({ state, item, onBind, onUse, onRepair }: { state: State; item: Stack; onBind: (uid: string) => void; onUse: (uid: string) => void; onRepair: (uid: string) => void }) {
+function ItemDetails({ state, item, onBind, onUse, onRepair, onDiscard }: { state: State; item: Stack; onBind: (uid: string) => void; onUse: (uid: string) => void; onRepair: (uid: string) => void; onDiscard?: (uid: string) => void }) {
     const d = ITEMS[item.id], p = state.player, equipped = p.armor === item.uid, bound = p.hotbar[p.selected] === item.uid;
     const consumable = d.kind === 'food' || d.kind === 'potion';
-    const wait = consumable ? Math.max(0, (d.kind === 'food' ? 2 - (state.time - p.foodAt) : 15 - (state.time - p.potionAt)), item.id === 'bandage' ? 5 - (state.time - p.hitAt) : 0) : 0;
+    const creative = isCreative(state);
+    const wait = consumable && !creative ? Math.max(0, (d.kind === 'food' ? 2 - (state.time - p.foodAt) : 15 - (state.time - p.potionAt)), item.id === 'bandage' ? 5 - (state.time - p.hitAt) : 0) : 0;
     const stats: [string, string][] = [['보유 수량', `${item.qty}개`], ['한 칸 최대 수량', `${d.max}개`]];
     if (d.damage !== undefined) stats.push(['기본 공격력', number(d.damage)]);
     if (d.interval !== undefined) stats.push(['공격 간격', `${number(d.interval)}초`]);
@@ -76,18 +77,20 @@ function ItemDetails({ state, item, onBind, onUse, onRepair }: { state: State; i
     if (d.armor !== undefined) stats.push(['방어력', number(d.armor)]);
     if (d.food !== undefined) stats.push(['허기 회복', `+${d.food}`]);
     if (d.heal !== undefined) stats.push([d.heal < 0 ? '사용 시 피해' : '체력 회복', `${d.heal < 0 ? '' : '+'}${Math.abs(d.heal)}`]);
-    if (item.charge !== undefined) stats.push(['남은 충전', `${item.charge} / 5회`]);
+    if (item.charge !== undefined) stats.push(['남은 충전', creative ? '∞ · 마력석 소모 없음' : `${item.charge} / 5회`]);
     if (item.id === 'bag') stats.push(['배낭 공간', '32칸 · 휴대 시 적용']);
     return <>
         <div className="item-detail-heading"><span className="item-detail-icon" aria-hidden="true">{d.icon}</span><div><span className="item-kind">{kindLabel(item)}</span><h3>{d.name}</h3>{equipped && <span className="item-badge equipped">착용 중</span>}</div></div>
         <p className="item-description">{itemDescription(item)}</p>
+        {creative && <p className="creative-item-note">크리에이티브 · 사용 수량·탄약·내구도가 소모되지 않으며, 수리 재료가 필요 없습니다.</p>}
         <dl className="item-stats">{stats.map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{value}</dd></div>)}</dl>
         {item.dur !== undefined && <div className={`detail-durability ${item.dur / (d.durability || 1) <= .25 ? 'low' : ''}`}><div><span>내구도{item.dur === 0 ? ' · 파손됨' : ''}</span><strong>{Math.floor(item.dur)} / {d.durability}</strong></div><Progress value={Math.max(0, Math.min(100, item.dur / (d.durability || 1) * 100))} aria-label="선택한 아이템 내구도" />{item.dur === 0 && <p>수리 후 다시 사용할 수 있습니다.</p>}</div>}
         <div className="item-actions">{item.id !== 'bag' && <button className="btn primary wide" disabled={d.kind === 'armor' ? equipped : bound} onClick={() => onBind(item.uid)}>{d.kind === 'armor' ? equipped ? '착용 중' : '방어구 착용' : bound ? `${p.selected + 1}번 퀵슬롯에 등록됨` : `${p.selected + 1}번 퀵슬롯에 등록`}</button>}
         {consumable && <button className="btn wide" disabled={wait > 0} onClick={() => onUse(item.uid)}>{wait > 0 ? `사용 대기 · ${Math.ceil(wait)}초` : d.kind === 'food' ? '1개 먹기' : '1개 사용하기'}</button>}
         {wait > 0 && <p className="action-note">게임 시간이 멈춰 있어 대기 시간도 멈춥니다. 계속하기 후 다시 사용하세요.</p>}
-        {item.dur !== undefined && <><button className="btn wide" disabled={item.dur >= (d.durability || 0)} onClick={() => onRepair(item.uid)}>{item.dur >= (d.durability || 0) ? '내구도 최대' : `수리 · 내구도 +${number(Math.min((d.durability || 0) - item.dur, Math.ceil((d.durability || 0) * .25)))}`}</button><p className="action-note">가까운 {(d.level || 0) > 1 ? '모루' : '제작대'}와 수리 재료가 필요합니다.</p></>}
-        {d.kind === 'potion' && wait === 0 && <p className="action-note">물약 / 붕대의 공통 재사용 대기: 15초</p>}
+        {item.dur !== undefined && <><button className="btn wide" disabled={item.dur >= (d.durability || 0)} onClick={() => onRepair(item.uid)}>{item.dur >= (d.durability || 0) ? '내구도 최대' : creative ? '완전히 수리하기' : `수리 · 내구도 +${number(Math.min((d.durability || 0) - item.dur, Math.ceil((d.durability || 0) * .25)))}`}</button><p className="action-note">{creative ? '시설과 재료 없이 완전히 수리할 수 있습니다.' : `가까운 ${(d.level || 0) > 1 ? '모루' : '제작대'}와 수리 재료가 필요합니다.`}</p></>}
+        {d.kind === 'potion' && wait === 0 && !creative && <p className="action-note">물약 / 붕대의 공통 재사용 대기: 15초</p>}
+        {creative && onDiscard && <button className="btn danger wide" onClick={() => onDiscard(item.uid)}>소지품에서 삭제</button>}
         </div>
     </>;
 }

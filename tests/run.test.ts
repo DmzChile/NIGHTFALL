@@ -6,3 +6,4 @@ import './woodland.test';
 import './atmosphere.test';
 import './audit.test';
 import './lighting.test';
+import './sandbox.test';

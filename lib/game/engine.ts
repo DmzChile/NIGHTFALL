@@ -9,6 +9,8 @@ import { alertEnemy, ensureAwareness, updateAwareness } from './awareness';
 import { ITEMS, MONSTERS, RECIPES, day, phase, type Recipe } from './data';
 import { addItem, capacity, count, craft, distance, height, normalizeSlots, makeEnemy, random, planNight, give, take, selected, stationFor, transactTransfer, uuid, biome, type State, type Building, type Stack, type Enemy } from './model';
 import { SaveManager, exportFile } from './storage';
+import { isCreative, type GameMode } from './model';
+import { executeGameCommand, type CommandResult } from './commands';
 export type Target = {
     kind: 'node' | 'enemy' | 'building' | 'drop';
     id: string;
@@ -18,9 +20,11 @@ export class Engine {
     state: State;
     storage: SaveManager;
     paused = true;
-    panel: 'pause' | 'inventory' | 'craft' | 'map' | 'facility' | 'death' | 'help' | null = null;
+    panel: 'pause' | 'inventory' | 'craft' | 'map' | 'facility' | 'death' | 'help' | 'console' | null = null;
     facility: string | null = null;
     keys = new Set<string>();
+    commandHistory: string[] = [];
+    commandLog: { input: string; result: CommandResult }[] = [];
     target: Target = null;
     notices: {
         id: number;
@@ -69,6 +73,8 @@ export class Engine {
         ensureForest(s, biome);
         ensureProgression(s);
         ensureAwareness(s);
+        s.gameMode ??= 'survival';
+        s.player.flying ??= false;
         this.state = s;
         this.lastStamina = s.player.staminaAt ?? 0;
         this.storage = storage;
@@ -99,6 +105,110 @@ export class Engine {
         this.onChange();
         return true;
     }
+    get creative() { return isCreative(this.state); }
+    get canModify() { return !this.disposed && !this.saveAccessLost && this.state.status === 'alive'; }
+    async command(input: string) {
+        const result = await executeGameCommand(this, input);
+        this.commandHistory = [...this.commandHistory, input].slice(-40);
+        this.commandLog = [...this.commandLog, { input, result }].slice(-30);
+        this.onChange();
+        return result;
+    }
+    setGameMode(mode: GameMode) {
+        if (!this.canModify || !['survival', 'creative'].includes(mode)) return false;
+        const s = this.state;
+        s.gameMode = mode;
+        s.player.flying = false;
+        s.player.vy = 0;
+        s.nightPlan = [];
+        s.nightWave = 0;
+        s.blood = false;
+        if (this.creative) {
+            this.restoreVitals();
+            for (const it of s.player.items) {
+                if (ITEMS[it.id].durability) it.dur = ITEMS[it.id].durability;
+                if (it.id.endsWith('_staff')) it.charge = 5;
+            }
+            s.projectiles = s.projectiles.filter(q => !q.enemy);
+        }
+        else if (phase(s.time) === '밤') planNight(s);
+        this.dirty = true;
+        this.notify(mode === 'creative' ? '크리에이티브 모드 · Tab에서 모든 아이템을 꺼낼 수 있습니다.' : '생존 모드 · 기존 난이도와 사망 규칙이 적용됩니다.');
+        return true;
+    }
+    toggleFlight(enabled = !this.state.player.flying) {
+        if (!this.canModify || !this.creative) return false;
+        this.state.player.flying = enabled;
+        this.state.player.vy = 0;
+        this.state.player.fishing = undefined;
+        this.dirty = true;
+        this.notify(enabled ? '비행 켜짐 · Space 상승 / Ctrl 하강 / Shift 가속' : '비행 꺼짐');
+        return true;
+    }
+    restoreVitals() {
+        if (!this.canModify) return false;
+        Object.assign(this.state.player, { hp: 100, hunger: 100, stamina: 100, poison: 0, curse: 0, slow: 0, stagger: 0, healLeft: 0, healRate: 0 });
+        this.dirty = true;
+        this.onChange();
+        return true;
+    }
+    giveItem(id: string, qty: number) {
+        if (!this.canModify || !addItem(this.state, id, qty)) return false;
+        if (this.creative && id.endsWith('_staff'))
+            for (const item of this.state.player.items.filter(it => it.id === id)) item.charge = 5;
+        this.dirty = true;
+        this.onChange();
+        return true;
+    }
+    discardItem(uid: string) {
+        if (!this.canModify || !this.creative) return;
+        this.state.player.items = this.state.player.items.filter(it => it.uid !== uid);
+        normalizeSlots(this.state);
+        this.dirty = true;
+        this.onChange();
+    }
+    removeTarget() {
+        if (!this.canModify || !this.creative || !this.target || this.target.distance > 5) return;
+        const s = this.state, target = this.target;
+        if (target.kind === 'node') {
+            const node = s.nodes.find(n => n.id === target.id);
+            if (!node || node.depleted) return;
+            node.depleted = true; node.hp = 0; node.readyAt = 0;
+        }
+        else if (target.kind === 'building') {
+            const building = s.buildings.find(b => b.id === target.id);
+            if (!building || !Object.hasOwn(ITEMS, building.kind)) return;
+            this.breakBuilding(building);
+            if (s.player.bed === building.id) s.player.bed = null;
+        }
+        else return;
+        this.target = null;
+        this.dirty = true;
+        this.notify('철거 완료 · 보관 중이던 물품은 바닥 가방에 남습니다.');
+    }
+    setTime(withinDay: number) {
+        if (!this.canModify || !Number.isInteger(withinDay) || withinDay < 0 || withinDay >= 720) return false;
+        const s = this.state, p = s.player, delta = Math.floor(s.time / 720) * 720 + withinDay - s.time;
+        const shift = (at: number) => at === 0 ? 0 : Math.max(.001, at + delta);
+        for (const key of ['hitAt', 'actionAt', 'foodAt', 'potionAt'] as const) p[key] += delta;
+        p.dodgeUntil = shift(p.dodgeUntil);
+        if (p.staminaAt !== undefined) p.staminaAt = Math.max(0, p.staminaAt + delta);
+        this.lastStamina = Math.max(0, this.lastStamina + delta);
+        for (const node of s.nodes) node.readyAt = shift(node.readyAt);
+        for (const building of s.buildings)
+            for (const key of ['grownAt', 'cooldown'] as const)
+                if (building[key] !== undefined) building[key] = shift(building[key]!);
+        for (const drop of s.drops) drop.expires = shift(drop.expires);
+        for (const enemy of s.enemies) if (enemy.vulnerable !== undefined) enemy.vulnerable = shift(enemy.vulnerable);
+        for (const region of Object.keys(s.regionNext || {})) s.regionNext![region] = Math.max(0, s.regionNext![region] + delta);
+        s.time += delta;
+        s.nightPlan = []; s.nightWave = 0; s.blood = false;
+        if (!this.creative && phase(s.time) === '밤') planNight(s);
+        else s.enemies = s.enemies.filter(e => e.animal || MONSTERS[e.kind].boss || e.night === 0);
+        this.dirty = true;
+        this.onChange();
+        return true;
+    }
     bind(uid: string) {
         const i = this.state.player.items.find(x => x.uid === uid);
         if (!i)
@@ -122,26 +232,26 @@ export class Engine {
         if (!['food', 'potion'].includes(d.kind))
             return;
         if (d.kind === 'food') {
-            if (s.time - p.foodAt < 2)
+            if (!this.creative && s.time - p.foodAt < 2)
                 return;
             p.foodAt = s.time;
             p.hunger = Math.min(100, p.hunger + (d.food || 0));
             // Consume before damage so a lethal meal is not returned in the death bag.
-            take(p.items, it.id, 1);
+            if (!this.creative) take(p.items, it.id, 1);
             if ((d.heal || 0) < 0)
                 this.hurt(-d.heal!);
             else if (d.heal && p.healLeft < 5) {
                 p.healLeft = 5;
                 p.healRate = d.heal / 5;
             }
-            if (it.id === 'raw_meat' && random(s) < .2) {
+            if (!this.creative && it.id === 'raw_meat' && random(s) < .2) {
                 p.slow = Math.max(p.slow, 10);
                 this.notify('날고기를 먹고 탈이 났습니다.');
             }
             this.notify(`${d.name} 사용`);
         }
         else if (d.kind === 'potion') {
-            if (s.time - p.potionAt < 15) {
+            if (!this.creative && s.time - p.potionAt < 15) {
                 this.notify('물약을 다시 사용할 때까지 기다리세요.');
                 return;
             }
@@ -149,7 +259,7 @@ export class Engine {
                 p.hp = Math.min(100, p.hp + 35);
             }
             if (it.id === 'bandage') {
-                if (s.time - p.hitAt < 5) {
+                if (!this.creative && s.time - p.hitAt < 5) {
                     this.notify('안전한 곳에서 붕대를 사용하세요.');
                     return;
                 }
@@ -165,7 +275,7 @@ export class Engine {
             if (it.id === 'pain') {
                 s.projectiles.push({ id: uuid(), x: p.x, y: height(p.x, p.z) + 1.6, z: p.z, vx: -Math.sin(p.yaw) * 14, vy: Math.sin(p.pitch) * 14, vz: -Math.cos(p.yaw) * 14, life: 4, damage: 0, enemy: false, type: 'pain' });
             }
-            take(p.items, it.id, 1);
+            if (!this.creative) take(p.items, it.id, 1);
             p.potionAt = s.time;
             this.notify(`${d.name} 사용`);
         }
@@ -250,12 +360,12 @@ export class Engine {
                     this.notify('작물을 수확했습니다.');
                 }
                 else if (!b.crop) {
-                    const seed = count(s.player.items, 'seed') ? 'seed' : count(s.player.items, 'herb_seed') ? 'herb_seed' : null;
+                    const seed = count(s.player.items, 'seed') ? 'seed' : count(s.player.items, 'herb_seed') ? 'herb_seed' : this.creative ? 'seed' : null;
                     if (!seed) {
                         this.notify('밀 또는 약초 씨앗이 필요합니다.');
                         return;
                     }
-                    take(s.player.items, seed, 1);
+                    if (!this.creative) take(s.player.items, seed, 1);
                     b.crop = seed === 'seed' ? 'wheat' : 'herb';
                     b.grownAt = s.time + 1440;
                     this.notify('씨앗을 심었습니다.');
@@ -273,7 +383,7 @@ export class Engine {
                     b.grownAt = undefined;
                     this.notify('덫에서 고기를 회수했습니다.');
                 }
-                else if (!b.grownAt && take(s.player.items, 'rotten', 1)) {
+                else if (!b.grownAt && (this.creative || take(s.player.items, 'rotten', 1))) {
                     b.grownAt = s.time + 120;
                     this.notify('덫에 미끼를 넣었습니다.');
                 }
@@ -296,15 +406,15 @@ export class Engine {
         if (!n || n.depleted)
             return;
         const d = nodeDefinition(n), it = selected(s), tool = it ? ITEMS[it.id] : undefined;
-        if (d.level > 0 && (!tool || tool.tool !== d.tool || (tool.level || 0) < d.level)) {
+        if (!this.creative && d.level > 0 && (!tool || tool.tool !== d.tool || (tool.level || 0) < d.level)) {
             this.notify(`필요 도구: ${d.tool === 'pick' ? '곡괭이' : '도끼'} 단계 ${d.level}`);
             return;
         }
-        if (it && tool?.durability && it.dur === 0) {
+        if (!this.creative && it && tool?.durability && it.dur === 0) {
             this.notify('도구를 수리하세요.');
             return;
         }
-        const damage = tool?.tool === d.tool ? (isTree(n) ? 1 + (tool?.level || 1) * 2 : 3) : 1;
+        const damage = this.creative ? n.hp : tool?.tool === d.tool ? (isTree(n) ? 1 + (tool?.level || 1) * 2 : 3) : 1;
         if (n.hp <= damage) {
             const items = structuredClone(s.player.items);
             if (!give(items, d.item, d.qty, capacity(s))) {
@@ -328,7 +438,7 @@ export class Engine {
             n.hp -= damage;
         }
         const current = it ? s.player.items.find(x => x.uid === it.uid) : undefined;
-        if (current?.dur !== undefined)
+        if (!this.creative && current?.dur !== undefined)
             current.dur = Math.max(0, current.dur - 1);
         s.player.actionAt = s.time;
         this.onAttack();
@@ -337,7 +447,9 @@ export class Engine {
         this.dirty = true;
     }
     place(it: Stack) {
+        if (!this.canModify || ITEMS[it.id]?.kind !== 'building' || !this.state.player.items.some(i => i.uid === it.uid)) return;
         const s = this.state, p = s.player, x = p.x - Math.sin(p.yaw) * 3, z = p.z - Math.cos(p.yaw) * 3;
+        if (this.creative && s.buildings.length >= 500) { this.notify('구조물은 한 월드에 최대 500개까지 배치할 수 있습니다.'); return; }
         if (Math.hypot(x, z) > 465 || s.buildings.some(b => distance(b, { x, z }) < 2.2) || s.nodes.some(n => !n.depleted && (isTree(n) || n.kind === 'rock') && distance(n, { x, z }) < (isTree(n) ? nodeRadius(n) + 1.1 : 1.5))) {
             this.notify('다른 물체와 겹쳐 배치할 수 없습니다.');
             return;
@@ -349,7 +461,7 @@ export class Engine {
         const b: Building = { id: uuid(), kind: it.id, x, z, yaw: p.yaw, hp: it.id === 'wall' ? 250 : 200, items: [], jobs: [], fuel: 0 };
         s.buildings.push(b);
         this.visual({ type: 'action', action: 'place', item: it.id });
-        take(p.items, it.id, 1);
+        if (!this.creative) take(p.items, it.id, 1);
         if (it.id === 'bedroll')
             p.bed = b.id;
         discoverItems(s);
@@ -363,7 +475,7 @@ export class Engine {
             this.notify(err);
         else {
             this.dirty = true;
-            this.notify(r.seconds ? '작업 대기열에 추가했습니다.' : `${ITEMS[r.output].name} 제작 완료`);
+            this.notify(r.seconds && !this.creative ? '작업 대기열에 추가했습니다.' : `${ITEMS[r.output].name} 제작 완료`);
         }
         this.onChange();
     }
@@ -381,7 +493,7 @@ export class Engine {
     }
     fuel(id: string) {
         const b = this.state.buildings.find(b => b.id === this.facility);
-        if (b && ['wood', 'coal', 'charcoal'].includes(id) && take(this.state.player.items, id, 1)) {
+        if (b && ['wood', 'coal', 'charcoal'].includes(id) && (this.creative || take(this.state.player.items, id, 1))) {
             b.fuel += id === 'coal' ? 40 : id === 'charcoal' ? 20 : 10;
             discoverItems(this.state);
             normalizeSlots(this.state);
@@ -410,6 +522,12 @@ export class Engine {
         if (!it || it.dur === undefined)
             return;
         const d = ITEMS[it.id];
+        if (this.creative) {
+            it.dur = d.durability;
+            this.dirty = true;
+            this.notify('장비를 완전히 수리했습니다.');
+            return;
+        }
         const station = (d.level || 0) > 1 ? 'anvil' : 'workbench';
         if (!stationFor(s, station)) {
             this.notify(`${station === 'anvil' ? '모루' : '제작대'}가 가까이 있어야 합니다.`);
@@ -452,7 +570,7 @@ export class Engine {
             this.dirty = true;
             return;
         }
-        if (d?.durability && it?.dur === 0) {
+        if (!this.creative && d?.durability && it?.dur === 0) {
             this.notify('파손된 장비는 사용할 수 없습니다.');
             return;
         }
@@ -465,22 +583,22 @@ export class Engine {
             let type = 'arrow';
             if (it.id.endsWith('_staff')) {
                 if ((it.charge || 0) === 0) {
-                    if (!take(p.items, 'magic_stone', 1)) {
+                    if (!this.creative && !take(p.items, 'magic_stone', 1)) {
                         this.notify('마력석이 필요합니다.');
                         return;
                     }
                     it.charge = 5;
                 }
-                it.charge!--;
+                if (!this.creative) it.charge!--;
                 type = it.id;
             }
             else {
-                type = ['blast_arrow', 'poison_arrow', 'silver_arrow', 'arrow'].find(id => count(p.items, id) > 0) || '';
+                type = ['blast_arrow', 'poison_arrow', 'silver_arrow', 'arrow'].find(id => count(p.items, id) > 0) || (this.creative ? 'arrow' : '');
                 if (!type) {
                     this.notify('화살이 필요합니다.');
                     return;
                 }
-                take(p.items, type, 1);
+                if (!this.creative) take(p.items, type, 1);
             }
             const y = height(p.x, p.z) + p.y + 1.6, sp = type === 'arrow' || type.endsWith('arrow') ? 32 : 18;
             s.projectiles.push({ id: uuid(), x: p.x, y, z: p.z, vx: -Math.sin(p.yaw) * Math.cos(p.pitch) * sp, vy: Math.sin(p.pitch) * sp, vz: -Math.cos(p.yaw) * Math.cos(p.pitch) * sp, life: 6, damage: d?.damage || 14, enemy: false, type });
@@ -492,7 +610,7 @@ export class Engine {
         }
         this.onAttack();
         this.visual({ type: 'action', action: it?.id.includes('bow') ? 'bow' : it?.id.endsWith('_staff') ? 'staff' : 'melee', item: it?.id || 'hand' });
-        if (it?.dur !== undefined)
+        if (!this.creative && it?.dur !== undefined)
             it.dur = Math.max(0, it.dur - 1);
         discoverItems(s);
         normalizeSlots(s);
@@ -574,7 +692,7 @@ export class Engine {
         z: number;
     }) {
         const s = this.state, p = s.player;
-        if (s.status !== 'alive' || damage <= 0 || (direct && (s.time - p.hitAt < .25 || s.time < p.dodgeUntil)))
+        if (this.creative || s.status !== 'alive' || damage <= 0 || (direct && (s.time - p.hitAt < .25 || s.time < p.dodgeUntil)))
             return false;
         const armor = p.items.find(i => i.uid === p.armor), def = armor && armor.dur !== 0 ? ITEMS[armor.id].armor || 0 : 0;
         let result = direct ? damage * 100 / (100 + def) * (p.curse > 0 ? 1.2 : 1) : damage;
@@ -641,7 +759,7 @@ export class Engine {
             this.notify('이미 수호자와 전투 중입니다.');
             return;
         }
-        if (kind === 'night_boss' && !['forest', 'rock', 'ruin'].every(q => s.quests.includes(q))) {
+        if (!this.creative && kind === 'night_boss' && !['forest', 'rock', 'ruin'].every(q => s.quests.includes(q))) {
             this.notify('서로 다른 봉인 조각 3개가 필요합니다.');
             return;
         }
@@ -699,13 +817,13 @@ export class Engine {
                 }
         }
         if (phase(s.time) !== oldPhase) {
-            if (phase(s.time) === '밤') {
+            if (!this.creative && phase(s.time) === '밤') {
                 planNight(s);
                 this.notify(s.blood ? '핏빛 달이 떴습니다.' : '밤이 시작되었습니다.');
             }
             void this.save();
         }
-        if (phase(s.time) === '밤') {
+        if (!this.creative && phase(s.time) === '밤') {
             const elapsed = s.time % 720 - 510;
             const wave = Math.floor(elapsed / 60) + 1;
             if (wave > s.nightWave && s.enemies.filter(e => !e.animal).length < 20) {
@@ -734,6 +852,11 @@ export class Engine {
     }
     private stepPlayer(dt: number) {
         const s = this.state, p = s.player;
+        const creative = this.creative, flying = creative && !!p.flying;
+        const altitude = height(p.x, p.z) + p.y;
+        if (creative) {
+            Object.assign(p, { hp: 100, hunger: 100, stamina: 100, poison: 0, curse: 0, slow: 0, stagger: 0 });
+        }
         const blocked = (x: number, z: number, swept = false) => {
             const obstacle = (center: { x: number; z: number }, radius: number) =>
                 distance(center, { x, z }) < radius || (swept && distance(center, p) > radius && segmentSphere(
@@ -747,56 +870,66 @@ export class Engine {
         if (norm && !(p.stagger || 0)) {
             ix /= norm;
             iz /= norm;
-            const run = this.keys.has('ShiftLeft') && p.stamina > 1;
-            let speed = run ? 6.5 : 4;
+            const run = (this.keys.has('ShiftLeft') || this.keys.has('ShiftRight')) && p.stamina > 1;
+            let speed = flying ? run ? 16 : 8 : run ? 6.5 : 4;
             if (p.slow > 0)
                 speed *= .75;
-            if (run) {
+            if (run && !creative) {
                 p.stamina = Math.max(0, p.stamina - 12 * dt);
                 this.lastStamina = s.time;
                 p.staminaAt = s.time;
             }
             const nx = p.x + (Math.cos(p.yaw) * ix - Math.sin(p.yaw) * iz) * speed * dt, nz = p.z + (-Math.sin(p.yaw) * ix - Math.cos(p.yaw) * iz) * speed * dt;
-            if (!blocked(nx, p.z))
+            if (flying ? Math.hypot(nx, p.z) <= 465 : !blocked(nx, p.z))
                 p.x = nx;
-            if (!blocked(p.x, nz))
+            if (flying ? Math.hypot(p.x, nz) <= 465 : !blocked(p.x, nz))
                 p.z = nz;
         }
-        if (this.keys.has('Space') && p.y === 0 && !(p.stagger || 0))
-            p.vy = 5;
-        p.y += p.vy * dt;
-        p.vy -= 15 * dt;
-        if (p.y < 0) {
-            p.y = 0;
+        if (flying) {
+            const vertical = (this.keys.has('Space') ? 1 : 0) - (this.keys.has('ControlLeft') || this.keys.has('ControlRight') ? 1 : 0);
+            const speed = this.keys.has('ShiftLeft') || this.keys.has('ShiftRight') ? 16 : 8;
+            p.y = Math.max(0, Math.min(120, altitude + vertical * speed * dt - height(p.x, p.z)));
             p.vy = 0;
         }
-        if (this.keys.has('ControlLeft') && !(p.stagger || 0) && p.stamina >= 25 && s.time > p.dodgeUntil + .8) {
-            p.stamina -= 25;
-            p.dodgeUntil = s.time + .15;
-            this.lastStamina = s.time;
-            p.staminaAt = s.time;
-            const dx = p.x - Math.sin(p.yaw) * 1.3, dz = p.z - Math.cos(p.yaw) * 1.3;
-            if (!blocked(dx, dz, true)) {
-                p.x = dx;
-                p.z = dz;
+        else {
+            if (this.keys.has('Space') && p.y === 0 && !(p.stagger || 0))
+                p.vy = 5;
+            p.y += p.vy * dt;
+            p.vy -= 15 * dt;
+            if (p.y < 0) {
+                p.y = 0;
+                p.vy = 0;
+            }
+            if (this.keys.has('ControlLeft') && !(p.stagger || 0) && p.stamina >= 25 && s.time > p.dodgeUntil + .8) {
+                if (!creative) p.stamina -= 25;
+                p.dodgeUntil = s.time + .15;
+                this.lastStamina = s.time;
+                p.staminaAt = s.time;
+                const dx = p.x - Math.sin(p.yaw) * 1.3, dz = p.z - Math.cos(p.yaw) * 1.3;
+                if (!blocked(dx, dz, true)) {
+                    p.x = dx;
+                    p.z = dz;
+                }
             }
         }
-        if (s.time - this.lastStamina > 1)
-            p.stamina = Math.min(100, p.stamina + (p.hunger < 20 ? 10 : 20) * dt);
-        p.hunger = Math.max(0, p.hunger - dt / 8 * (norm && this.keys.has('ShiftLeft') && p.stamina > 1 ? 1.5 : 1));
-        p.stagger = Math.max(0, (p.stagger || 0) - dt);
-        p.poisonResist = Math.max(0, (p.poisonResist || 0) - dt);
-        if (p.hunger === 0 && s.tick % 150 === 0)
-            this.hurt(1, false);
-        if (s.status !== 'alive') return;
-        if (p.poison > 0) {
-            p.poison = Math.max(0, p.poison - dt);
-            if (s.tick % 30 === 0)
-                this.hurt(2, false);
+        if (!creative) {
+            if (s.time - this.lastStamina > 1)
+                p.stamina = Math.min(100, p.stamina + (p.hunger < 20 ? 10 : 20) * dt);
+            p.hunger = Math.max(0, p.hunger - dt / 8 * (norm && this.keys.has('ShiftLeft') && p.stamina > 1 ? 1.5 : 1));
+            p.stagger = Math.max(0, (p.stagger || 0) - dt);
+            p.poisonResist = Math.max(0, (p.poisonResist || 0) - dt);
+            if (p.hunger === 0 && s.tick % 150 === 0)
+                this.hurt(1, false);
+            if (s.status !== 'alive') return;
+            if (p.poison > 0) {
+                p.poison = Math.max(0, p.poison - dt);
+                if (s.tick % 30 === 0)
+                    this.hurt(2, false);
+            }
+            if (s.status !== 'alive') return;
+            p.curse = Math.max(0, p.curse - dt);
+            p.slow = Math.max(0, p.slow - dt);
         }
-        if (s.status !== 'alive') return;
-        p.curse = Math.max(0, p.curse - dt);
-        p.slow = Math.max(0, p.slow - dt);
         if (p.healLeft > 0) {
             p.healLeft -= dt;
             p.hp = Math.min(100, p.hp + p.healRate * dt);
@@ -836,6 +969,7 @@ export class Engine {
     }
     private stepRegions() {
         const s = this.state, p = s.player;
+        if (this.creative) return;
         // Replenish at most once per second and retain per-region cooldowns in saves.
         if (s.tick % 30 !== 0)
             return;
@@ -913,7 +1047,7 @@ export class Engine {
             }
             e.slow = Math.max(0, e.slow - dt);
             e.skill -= dt;
-            if (e.animal) {
+            if (e.animal || this.creative) {
                 if (dist > 130) continue;
                 e.timer -= dt;
                 const a = e.timer > 0 ? Math.atan2(e.z - p.z, e.x - p.x) : s.time * .12 + parseInt(e.id.slice(0, 2), 16);

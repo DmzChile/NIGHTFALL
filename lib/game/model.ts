@@ -92,6 +92,7 @@ export type Drop = {
     expires: number;
     bag: boolean;
 };
+export type GameMode = 'survival' | 'creative';
 export type State = {
     formatVersion: 1;
     contentVersion: 1;
@@ -103,6 +104,7 @@ export type State = {
     seed: string;
     difficulty: 'easy' | 'normal' | 'hard';
     mode: 'normal' | 'permadeath';
+    gameMode?: GameMode;
     status: 'alive' | 'dead' | 'ended';
     time: number;
     tick: number;
@@ -114,6 +116,7 @@ export type State = {
         z: number;
         y: number;
         vy: number;
+        flying?: boolean;
         yaw: number;
         pitch: number;
         hp: number;
@@ -268,8 +271,11 @@ export function addItem(s: State, id: string, qty: number) {
     }
     return ok;
 }
-export function createWorld(name: string, seed: string, difficulty: State['difficulty'] = 'normal', mode: State['mode'] = 'normal'): State {
+export const isCreative = (s: State) => s.gameMode === 'creative';
+export function createWorld(name: string, seed: string, difficulty: State['difficulty'] = 'normal', mode: State['mode'] = 'normal', gameMode: GameMode = 'survival'): State {
     const s: State = { formatVersion: 1, contentVersion: 1, generatorVersion: 1, terrainVersion: TERRAIN_VERSION, id: uuid(), name: name.slice(0, 40) || '새로운 섬', seed: seed.slice(0, 64) || uuid().slice(0, 8), difficulty, mode, status: 'alive', time: 0, tick: 0, rng: 1, created: Date.now(), generation: 0, player: { x: 0, z: 8, y: 0, vy: 0, yaw: 0, pitch: 0, hp: 100, hunger: 100, stamina: 100, items: [], hotbar: Array(8).fill(null), selected: 0, armor: null, hitAt: -10, actionAt: -10, potionAt: -20, foodAt: -3, dodgeUntil: 0, poison: 0, curse: 0, slow: 0, healLeft: 0, healRate: 0, bed: null }, nodes: [], buildings: [], enemies: [], projectiles: [], drops: [], previousKills: 0, kills: {}, nightPlan: [], nightWave: 0, blood: false, lastBlood: 0, quests: [], discovered: ['초원'], knownItems: [], unlockedRecipes: starterRecipes(), regionNext: {} };
+    s.gameMode = gameMode;
+    s.player.flying = false;
     s.rng = hash(s.seed);
     const gen = { rng: hash(s.seed + 'world') };
     const node = (kind: string, x: number, z: number) => {
@@ -317,6 +323,9 @@ export function createWorld(name: string, seed: string, difficulty: State['diffi
     ][])
         s.buildings.push({ id: uuid(), kind, x, z, yaw: 0, hp: 10000, items: [], jobs: [], fuel: 0, cooldown: 0, claimed: false });
     ensureForest(s, biome);
+    if (isCreative(s))
+        for (const id of ['workbench', 'wall', 'chest', 'mithril_axe', 'mithril_pick', 'mithril_sword', 'strong_bow', 'bag'])
+            addItem(s, id, 1);
     return s;
 }
 export function makeEnemy(s: State, kind: string, tier: number, x: number, z: number, animal = false, summon = false): Enemy {
@@ -351,6 +360,8 @@ export function stationFor(s: State, station: string, chosen?: string) {
     return s.buildings.find(b => (b.kind === station || (station === 'furnace' && b.kind === 'advanced_furnace')) && distance(b, s.player) <= 3.5 && (!chosen || b.id === chosen));
 }
 export function craft(s: State, r: Recipe, chosen?: string): string | null {
+    if (isCreative(s))
+        return addItem(s, r.output, r.qty) ? null : '인벤토리 공간이 부족합니다.';
     discoverItems(s);
     if (!recipeUnlocked(s, r))
         return "아직 발견하지 않은 재료가 있는 제작법입니다.";
@@ -444,6 +455,8 @@ export function transactTransfer(from: Stack[], to: Stack[], uid: string, cap: n
 }
 export function validateState(v: unknown): State {
     const s = validateWorldState(v);
+    s.gameMode ??= 'survival';
+    s.player.flying ??= false;
     migrateTerrain(s);
     ensureForest(s, biome);
     ensureProgression(s);
