@@ -67,6 +67,7 @@ export class GameScene {
         this.host.appendChild(this.renderer.domElement);
         this.scene.fog = new THREE.FogExp2(0xaac3bb, .0065);
         this.scene.add(this.ambient, this.sun, this.sun.target, this.root, this.trees.root, this.camera);
+        void this.trees.loadModels().then(() => { if (!this.disposed) this.lighting.invalidate(); });
         this.sun.position.set(-30, 60, -20);
         const g = new THREE.PlaneGeometry(TERRAIN_SIZE, TERRAIN_SIZE, TERRAIN_SEGMENTS, TERRAIN_SEGMENTS);
         g.rotateX(-Math.PI / 2);

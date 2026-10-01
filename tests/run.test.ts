@@ -3,6 +3,7 @@ import './features.test';
 import './animation.test';
 import './terrain.test';
 import './woodland.test';
+import './tree-models.test';
 import './atmosphere.test';
 import './audit.test';
 import './lighting.test';

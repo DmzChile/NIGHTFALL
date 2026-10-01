@@ -3,6 +3,8 @@ import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import type { NodeState, State } from './model';
 import { terrainHeight } from './terrain';
 import { isTree, TREE_SIZES, treeColor, treeYaw, type TreeTraits } from './woodland';
+import { loadTreeTemplate, treeModelGeometry, TREE_MODEL_URLS } from './tree-models';
+import type { TreeSpecies } from './woodland';
 
 /** Merge trunk, branches and foliage into one vertex-colored template per appearance. */
 export function treeGeometry(traits: TreeTraits, hard = false) {
@@ -62,6 +64,28 @@ export class TreeField {
     private rotation = new THREE.Quaternion();
     private euler = new THREE.Euler();
     private scale = new THREE.Vector3(1, 1, 1);
+    private templates = new Map<TreeSpecies, THREE.BufferGeometry>();
+    private modelLoad: Promise<void> | null = null;
+    private disposed = false;
+    /** Loading never blocks play. Procedural trees remain until each model is ready. */
+    loadModels(loader = loadTreeTemplate) {
+        if (this.disposed) return Promise.resolve();
+        if (this.modelLoad) return this.modelLoad;
+        this.modelLoad = Promise.all((Object.keys(TREE_MODEL_URLS) as TreeSpecies[]).map(async species => {
+            try {
+                const template = await loader(species);
+                if (this.disposed) { template.dispose(); return; }
+                this.templates.set(species, template);
+                this.clear();
+                for (const [key, geometry] of this.geometries) if (key.split('/')[2] === species) {
+                    geometry.dispose(); this.geometries.delete(key);
+                }
+            } catch (error) {
+                if (!this.disposed) console.warn(`나무 모델 로딩 실패 (${species}): 기본 나무를 사용합니다.`, error);
+            }
+        })).then(() => undefined);
+        return this.modelLoad;
+    }
     invalidate() { this.dirty = true; }
     shake(id: string, time: number) { this.shakes.set(id, time); this.invalidate(); }
     private write(batch: Batch, index: number, n: NodeState, angle = 0) {
@@ -85,7 +109,11 @@ export class TreeField {
                 if (!batch || batch.capacity < nodes.length) {
                     if (batch) { this.root.remove(batch.mesh); batch.mesh.dispose(); }
                     let geometry = this.geometries.get(key);
-                    if (!geometry) { geometry = treeGeometry(nodes[0].tree!, nodes[0].kind === 'hardtree'); this.geometries.set(key, geometry); }
+                    if (!geometry) {
+                        const traits = nodes[0].tree!, template = this.templates.get(traits.species);
+                        geometry = template ? treeModelGeometry(template, traits, nodes[0].kind === 'hardtree') : treeGeometry(traits, nodes[0].kind === 'hardtree');
+                        this.geometries.set(key, geometry);
+                    }
                     const capacity = Math.max(8, 2 ** Math.ceil(Math.log2(nodes.length))), mesh = new THREE.InstancedMesh(geometry, this.material, capacity);
                     mesh.castShadow = true; mesh.receiveShadow = true;
                     mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage); mesh.name = `trees/${key}`;
@@ -112,5 +140,10 @@ export class TreeField {
         this.root.clear(); this.batches.clear(); this.instances.clear(); this.shakes.clear(); this.hits = new WeakMap();
         this.layout = ''; this.count = -1; this.dirty = true;
     }
-    dispose() { this.clear(); for (const geometry of this.geometries.values()) geometry.dispose(); this.geometries.clear(); this.material.dispose(); }
+    dispose() {
+        this.disposed = true; this.clear();
+        for (const geometry of this.geometries.values()) geometry.dispose(); this.geometries.clear();
+        for (const template of this.templates.values()) template.dispose(); this.templates.clear();
+        this.material.dispose();
+    }
 }
