@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 
-export const CLOUD_COUNT = 12;
+export const CLOUD_COUNT = 15;
 export const CLOUD_LOBES = 5;
 
 /** Visual weather is derived from simulation time, never from the loot/spawn RNG. */
