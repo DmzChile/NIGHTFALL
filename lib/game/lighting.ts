@@ -25,13 +25,18 @@ export function lightingState(sky: SkySample, blood = false) {
     const golden = (1 - THREE.MathUtils.smoothstep(Math.abs(sky.sun.y), .06, .42)) * THREE.MathUtils.smoothstep(sky.sun.y, -.16, .025);
     const sunlight = new THREE.Color(0xffe7be).lerp(new THREE.Color(0xffb867), golden);
     const isSun = sky.sun.y >= 0;
+    // Reduce the flat blue fill at the horizon; preserve enough cool fill to read terrain at night.
+    const environmentDay = sky.daylight * (.6 + solar * .4);
+    const skyColor = new THREE.Color(0x536f98).lerp(new THREE.Color(0xbed5ed), environmentDay).lerp(new THREE.Color(0xf2b590), golden * .22);
+    const groundColor = new THREE.Color(0x293746).lerp(new THREE.Color(0x73624c), environmentDay).lerp(new THREE.Color(0x8a5539), golden * .3);
     return {
         direction: isSun ? sky.sun : sky.moon,
-        keyColor: isSun ? sunlight : new THREE.Color(blood ? 0xe0bac0 : 0xc4d8f4),
-        keyIntensity: isSun ? solar * 3.1 : lunar * .36,
-        skyColor: new THREE.Color(0x526e91).lerp(new THREE.Color(0xb3d1e8), sky.daylight),
-        groundColor: new THREE.Color(0x263040).lerp(new THREE.Color(0x65513c), sky.daylight),
-        ambientIntensity: .28 + sky.daylight * .62,
+        keyColor: isSun ? sunlight : new THREE.Color(blood ? 0xe0bac0 : 0xb6cef2),
+        keyIntensity: isSun ? solar * 2.8 : lunar * .44,
+        skyColor, groundColor,
+        ambientIntensity: .34 + environmentDay * .44 + golden * .025,
+        shadowIntensity: isSun ? .54 + solar * .3 : .46 + lunar * .12,
+        shadowRadius: isSun ? 2 + (1 - solar) : 3,
         zenithColor: new THREE.Color(0x081525).lerp(new THREE.Color(0x72a8ce), sky.daylight),
         sunlight, golden,
     };
@@ -49,8 +54,8 @@ export function stableShadowFocus(focus: THREE.Vector3, direction: THREE.Vector3
 
 /** A single shadow-casting key light is reused for sun and moon. Point lights stay cheap. */
 export class SceneLighting {
-    key = new THREE.DirectionalLight(0xffe7be, 3.1);
-    ambient = new THREE.HemisphereLight(0xb3d1e8, 0x65513c, .9);
+    key = new THREE.DirectionalLight(0xffe7be, 2.8);
+    ambient = new THREE.HemisphereLight(0xbed5ed, 0x73624c, .78);
     private focus = new THREE.Vector3();
     private forward = new THREE.Vector3();
     private previousPosition = new THREE.Vector3(Infinity, Infinity, Infinity);
@@ -62,7 +67,7 @@ export class SceneLighting {
         this.key.shadow.bias = -.00015;
         this.key.shadow.normalBias = .05;
         this.key.shadow.radius = 2;
-        this.key.shadow.intensity = .86;
+        this.key.shadow.intensity = .84;
         this.key.shadow.camera.near = .5;
         this.key.shadow.camera.far = 380;
     }
@@ -87,6 +92,7 @@ export class SceneLighting {
     update(renderer: THREE.WebGLRenderer, camera: THREE.PerspectiveCamera, sky: SkySample, blood: boolean, moving: boolean) {
         const light = lightingState(sky, blood), extent = GRAPHICS[this.quality].shadowExtent;
         this.key.color.copy(light.keyColor); this.key.intensity = light.keyIntensity;
+        this.key.shadow.intensity = light.shadowIntensity; this.key.shadow.radius = light.shadowRadius;
         this.ambient.color.copy(light.skyColor); this.ambient.groundColor.copy(light.groundColor); this.ambient.intensity = light.ambientIntensity;
         camera.getWorldDirection(this.forward); this.forward.y = 0;
         if (this.forward.lengthSq() > .001) this.forward.normalize();

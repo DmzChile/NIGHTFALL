@@ -1,6 +1,5 @@
 "use client";
 import { recipeUnlocked, missingDiscoveries } from './progression';
-import { regionWarning } from './regions';
 import { detectionRadius } from './awareness';
 import { isTree, nodeDefinition } from './woodland';
 import { useState, useEffect, useRef, useCallback } from 'react';
@@ -18,6 +17,7 @@ import { createWorld, isCreative, selected, count, capacity, stationFor, type Ga
 import { ITEMS, MONSTERS, RECIPES, phase, day } from './data';
 import { InventoryView, StackGrid } from './inventory-ui';
 import { CommandConsole, CreativeCatalog } from './sandbox-ui';
+import { GameHud } from './hud';
 
 const difficultyLabel = (value: string) => value === 'easy' ? '쉬움' : value === 'hard' ? '어려움' : '기본';
 const modeLabel = (value: string) => value === 'permadeath' ? '영구 사망' : '일반 생존';
@@ -218,7 +218,7 @@ function App() {
         }
         return () => life.abort();
     }, []);
-    const e = activeEngine, s = e?.state, p = s?.player, it = s ? selected(s) : undefined;
+    const e = activeEngine, s = e?.state, p = s?.player;
     const target = e?.target;
     let targetName = '', targetHelp = '';
     if (s && target) {
@@ -272,7 +272,7 @@ function App() {
         if (f)
             void importSave(f);
     }}/>
-    {menu !== 'play' && <div className="screen"><div className="menu"><span className="eyebrow">SANDBOX SURVIVAL / ALPHA 0.53</span>
+    {menu !== 'play' && <div className="screen"><div className="menu"><span className="eyebrow">SANDBOX SURVIVAL / ALPHA 0.54</span>
         {menu === 'home' ? <>
             <h1 className="wordmark">NIGHT<br />FALL</h1><p className="subtitle">낮을 준비하고, 밤을 견디다.</p>
             {worlds.length > 0 && <div className="latest-world"><span className="section-label">최근 저장한 섬</span><WorldSummary world={worlds[0]} /><button className="btn primary wide" disabled={busy} onClick={() => load(worlds[0].id)}>이 섬 이어하기</button></div>}
@@ -292,14 +292,8 @@ function App() {
             <h2>저장된 월드</h2><p className="muted">{worlds.length} / 5개 · 가장 최근 저장 순서</p><div className="world-list">{worlds.map(w => <div className="world-row" key={w.id}><WorldSummary world={w} /><div className="button-row"><button className="btn" disabled={busy} onClick={() => load(w.id)}>월드 열기</button><button className="btn danger" disabled={busy} onClick={() => setDeleteId(w.id)}>삭제</button></div></div>)}</div>{!worlds.length && <p className="empty">저장된 월드가 없습니다. 새로운 섬을 만들거나 백업 파일을 가져오세요.</p>}<button className="btn wide" disabled={busy} onClick={() => file.current?.click()}>백업 파일 가져오기</button><button className="smallbutton" onClick={() => setMenu('home')}>메인 메뉴로</button>
         </> : <><h2>조작법</h2><Controls /><button className="btn wide" onClick={() => setMenu('home')}>메인 메뉴로</button></>}
         {err && <p className="error" role="alert">{err}</p>}<p className="mobile-note">PC 키보드와 마우스가 필요한 게임입니다.</p>
-        </div><div className="menu-footer"><span>낮에는 채집. 밤에는 생존.</span><span>LOCAL SAVE / v0.53.0</span></div></div>}
-        {menu === 'play' && s && p && e && <><div className="hud"><div className="topline"><div className="daypill">{e.creative && <span className="sandbox-tag">CREATIVE{p.flying ? ' / FLY' : ''}</span>}<strong>DAY {day(s.time).toString().padStart(2, '0')}</strong><small>{phase(s.time)} · {Math.floor((s.time % 720) / 720 * 100)}%{s.blood ? ' · 핏빛 달' : ''}</small></div><div className="compass">{['N', 'NW', 'W', 'SW', 'S', 'SE', 'E', 'NE'][Math.round(((p.yaw % (2 * Math.PI) + 2 * Math.PI) % (2 * Math.PI)) / (Math.PI / 4)) % 8]} ─ ◇ ─ {biomeLabel(p.x, p.z)}<small> · {regionWarning(biomeLabel(p.x, p.z))}</small></div><div className="save-label">{e.saveLabel}{e.dirty ? ' · 변경됨' : ''}<div className="controls-tip">TAB 가방 · M 지도 · / 명령어 · ESC 메뉴</div></div></div>{!e.paused && <><div className="crosshair"/>{targetName && <div className="target">{targetName}<small>{targetHelp}</small></div>}</>}<div className="vitals">{[['체력', p.hp, ''], ['허기', p.hunger, 'hunger'], ['스태미나', p.stamina, 'stamina']].map(([n, v, c]) => <div key={String(n)}><div className="vital-label"><span>{n}</span><span>{Math.ceil(Number(v))} / 100</span></div><div className="track"><div className={`fill ${c}`} style={{ width: `${v}%` }}/></div></div>)}</div><div className="status-line">{p.poison > 0 ? '독 · ' : ''}{p.curse > 0 ? '저주 · ' : ''}{p.slow > 0 ? '둔화 · ' : ''}{(p.poisonResist || 0) > 0 ? '독 저항 · ' : ''}{(p.stagger || 0) > 0 ? '경직 · ' : ''}{p.fishing ? `낚시 ${Math.ceil(p.fishing.remaining)}초` : ''}</div><div className="hotbar">{p.hotbar.map((uid, i) => {
-        const v = p.items.find(it => it.uid === uid);
-        return <button key={i} className={`slot ${p.selected === i ? 'selected' : ''}`} title={v ? ITEMS[v.id].name : `빈 슬롯 ${i + 1}`} onClick={() => {
-            p.selected = i;
-            rerender();
-        }}><span className="num">{i + 1}</span>{v && <><span className="itemicon">{ITEMS[v.id].icon}</span><span className="short">{ITEMS[v.id].name}</span><span className="quantity">{e.creative ? '∞' : v.qty > 1 ? v.qty : ''}</span></>}</button>;
-    })}</div><div className="selected-name">{it ? ITEMS[it.id].name : '맨손'}{it?.dur !== undefined ? ` · ${Math.floor(it.dur)}/${ITEMS[it.id].durability}` : ''}</div><div className="objective"><span>{e.creative ? '자유 건축' : '생존 기록'}</span><p>{e.creative ? 'Tab 아이템 · F 비행 · R 철거' : s.quests.includes('night') ? '밤의 군주 처치 완료' : s.quests.length ? `봉인 조각 ${s.quests.length} / 3` : p.items.some(i => i.id === 'stone_pick') ? '철광석을 찾아 장비를 만들기' : s.buildings.some(b => b.kind === 'workbench') ? '돌 곡괭이와 창 만들기' : '가지와 돌을 모아 제작대 만들기'}</p></div></div><div className="damage-flash" style={{ opacity: flash }}/>
+        </div><div className="menu-footer"><span>낮에는 채집. 밤에는 생존.</span><span>LOCAL SAVE / v0.54.0</span></div></div>}
+        {menu === 'play' && s && p && e && <><GameHud engine={e} targetName={targetName} targetHelp={targetHelp} onSelectSlot={index => { p.selected = index; rerender(); }} /><div className="damage-flash" style={{ opacity: flash }}/>
         <Dialog open={e.paused && e.panel !== null} onOpenChange={open => {
         if (!open && !busy && s.status === 'alive')
             void scene.current?.play();
