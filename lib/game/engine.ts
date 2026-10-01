@@ -209,7 +209,14 @@ export class Engine {
         this.onChange();
         return true;
     }
+    selectSlot(index: number) {
+        if (!this.canModify || !Number.isInteger(index) || index < 0 || index >= 8) return;
+        this.state.player.selected = index;
+        this.dirty = true;
+        this.onChange();
+    }
     bind(uid: string) {
+        if (!this.canModify) return;
         const i = this.state.player.items.find(x => x.uid === uid);
         if (!i)
             return;
@@ -226,7 +233,7 @@ export class Engine {
     }
     useItem(uid?: string) {
         const s = this.state, p = s.player, it = uid ? p.items.find(i => i.uid === uid) : selected(s);
-        if (!it || this.disposed || s.status !== 'alive')
+        if (!it || !this.canModify)
             return;
         const d = ITEMS[it.id];
         if (!['food', 'potion'].includes(d.kind))
@@ -273,7 +280,7 @@ export class Engine {
             if (it.id === 'purify')
                 p.curse = 0;
             if (it.id === 'pain') {
-                s.projectiles.push({ id: uuid(), x: p.x, y: height(p.x, p.z) + 1.6, z: p.z, vx: -Math.sin(p.yaw) * 14, vy: Math.sin(p.pitch) * 14, vz: -Math.cos(p.yaw) * 14, life: 4, damage: 0, enemy: false, type: 'pain' });
+                s.projectiles.push({ id: uuid(), x: p.x, y: height(p.x, p.z) + p.y + 1.6, z: p.z, vx: -Math.sin(p.yaw) * Math.cos(p.pitch) * 14, vy: Math.sin(p.pitch) * 14, vz: -Math.cos(p.yaw) * Math.cos(p.pitch) * 14, life: 4, damage: 0, enemy: false, type: 'pain' });
             }
             if (!this.creative) take(p.items, it.id, 1);
             p.potionAt = s.time;
@@ -286,6 +293,7 @@ export class Engine {
         this.onChange();
     }
     interact() {
+        if (!this.canModify) return;
         const s = this.state, t = this.target;
         if (!t || t.distance > 3.5) {
             const it = selected(s);
@@ -399,6 +407,7 @@ export class Engine {
         this.onChange();
     }
     gather() {
+        if (!this.canModify) return;
         const s = this.state, t = this.target;
         if (!t || t.kind !== 'node' || t.distance > 3.8 || s.time - s.player.actionAt < .5)
             return;
@@ -470,6 +479,7 @@ export class Engine {
         this.notify(`${ITEMS[it.id].name} 배치`);
     }
     craftRecipe(r: Recipe) {
+        if (!this.canModify) return;
         const err = craft(this.state, r, this.panel === 'facility' ? this.facility || undefined : undefined);
         if (err)
             this.notify(err);
@@ -480,6 +490,7 @@ export class Engine {
         this.onChange();
     }
     transfer(uid: string, deposit: boolean) {
+        if (!this.canModify) return;
         const b = this.state.buildings.find(b => b.id === this.facility);
         if (!b)
             return;
@@ -492,6 +503,7 @@ export class Engine {
         this.onChange();
     }
     fuel(id: string) {
+        if (!this.canModify) return;
         const b = this.state.buildings.find(b => b.id === this.facility);
         if (b && ['wood', 'coal', 'charcoal'].includes(id) && (this.creative || take(this.state.player.items, id, 1))) {
             b.fuel += id === 'coal' ? 40 : id === 'charcoal' ? 20 : 10;
@@ -502,6 +514,7 @@ export class Engine {
         }
     }
     cancelJob(jobId: string) {
+        if (!this.canModify) return;
         const b = this.state.buildings.find(b => b.id === this.facility), j = b?.jobs.find(j => j.id === jobId);
         if (!b || !j)
             return;
@@ -518,6 +531,7 @@ export class Engine {
         this.onChange();
     }
     repair(uid: string) {
+        if (!this.canModify) return;
         const s = this.state, it = s.player.items.find(i => i.uid === uid);
         if (!it || it.dur === undefined)
             return;
@@ -548,6 +562,7 @@ export class Engine {
         this.onChange();
     }
     attack() {
+        if (!this.canModify) return;
         const s = this.state, p = s.player, it = selected(s), d = it ? ITEMS[it.id] : null;
         if ((p.stagger || 0) > 0 || p.fishing || s.time - p.actionAt < (d?.interval || .6))
             return;
@@ -743,7 +758,7 @@ export class Engine {
     }
     respawn() {
         const s = this.state;
-        if (this.disposed || s.mode === 'permadeath' || s.status !== 'dead')
+        if (this.disposed || this.saveAccessLost || s.mode === 'permadeath' || s.status !== 'dead')
             return;
         const bed = s.buildings.find(b => b.id === s.player.bed);
         Object.assign(s.player, { x: bed?.x ?? 0, z: (bed?.z ?? 8) + 2, y: 0, vy: 0, hp: 50, hunger: 50, stamina: 100, poison: 0, curse: 0, slow: 0, stagger: 0, poisonResist: 0, fishing: undefined, healLeft: 0, dodgeUntil: s.time + 5 });
@@ -754,6 +769,7 @@ export class Engine {
         this.notify('사망 가방을 지도에서 찾을 수 있습니다.');
     }
     summon(b: Building) {
+        if (!this.canModify) return;
         const s = this.state, kind = b.kind === 'forest_altar' ? 'forest_boss' : b.kind === 'rock_altar' ? 'rock_boss' : b.kind === 'ruin_altar' ? 'ruin_boss' : 'night_boss';
         if (s.enemies.some(e => MONSTERS[e.kind].boss)) {
             this.notify('이미 수호자와 전투 중입니다.');
@@ -769,7 +785,7 @@ export class Engine {
         void this.save();
     }
     step(dt: number) {
-        if (this.paused || this.state.status !== 'alive' || this.disposed)
+        if (this.paused || !this.canModify)
             return;
         const s = this.state, oldPhase = phase(s.time), oldDay = day(s.time);
         s.time += dt;

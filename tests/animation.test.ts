@@ -44,8 +44,20 @@ describe('renderer animation', () => {
         assert.equal(frequent.speed, 0);
         frequent.update(100, 100, 3);
         assert.equal(frequent.speed, 0);
-        frequent.update(0, 0, 2);
+        frequent.update(0, 0, 3);
         assert.equal(frequent.x, 100);
+    });
+    it('resets motion samples after a clock rewind and resumes on the next simulation tick', () => {
+        const motion = new MotionSample(0, 0, 600);
+        motion.update(1, 0, 601);
+        assert.equal(motion.speed, 1);
+        motion.update(1, 0, 0);
+        assert.equal(motion.speed, 0); assert.equal(motion.time, 0);
+        motion.update(1, 0, 1);
+        assert.equal(motion.speed, 0);
+        motion.update(2, 0, 2);
+        assert.equal(motion.speed, 1);
+        assert.ok(Math.abs(motion.heading + Math.PI / 2) < 1e-10);
     });
     it('limbs alternate, wings flap and slime stretching preserves volume', () => {
         for (const profile of profiles) {

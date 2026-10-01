@@ -354,10 +354,7 @@ export class GameScene {
                 engine.pause();
             if (e.code.startsWith('Digit')) {
                 const n = +e.code.slice(5) - 1;
-                if (n >= 0 && n < 8) {
-                    engine.state.player.selected = n;
-                    engine.onChange();
-                }
+                engine.selectSlot(n);
             }
             if (!engine.paused)
                 engine.keys.add(e.code);
@@ -396,8 +393,7 @@ export class GameScene {
         this.renderer.domElement.addEventListener('contextmenu', e => e.preventDefault(), sig);
         this.renderer.domElement.addEventListener('wheel', e => {
             if (this.engine && !this.engine.paused) {
-                this.engine.state.player.selected = (this.engine.state.player.selected + (e.deltaY > 0 ? 1 : 7)) % 8;
-                this.engine.onChange();
+                this.engine.selectSlot((this.engine.state.player.selected + (e.deltaY > 0 ? 1 : 7)) % 8);
             }
         }, { ...sig, passive: true });
         document.addEventListener('visibilitychange', () => {

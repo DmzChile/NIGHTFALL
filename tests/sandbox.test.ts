@@ -19,6 +19,46 @@ function advance(engine: Engine, seconds: number) {
     for (let i = 0; i < Math.round(seconds * 30); i++) engine.step(1 / 30);
 }
 describe('Creative mode and literal game commands', () => {
+    it('preserves the backup state when inventory and facility actions follow lock loss', () => {
+        for (const mode of ['survival', 'creative'] as const) {
+            const { s, engine, storage } = fixture(mode);
+            give(s.player.items, 'wood', 20); give(s.player.items, 'heal', 1); give(s.player.items, 'stone_axe', 1);
+            const axe = s.player.items.find(it => it.id === 'stone_axe')!;
+            axe.dur = 10; s.player.hp = 50;
+            s.buildings.push({ id: 'furnace', kind: 'furnace', x: 0, z: 8, yaw: 0, hp: 200, items: [], fuel: 0,
+                jobs: [{ id: 'job', recipe: 'iron', remaining: 10, reserved: { iron_ore: 2 } }] });
+            engine.facility = 'furnace';
+            storage.lockLost();
+            assert.equal(engine.canModify, false);
+            const before = structuredClone(s);
+            const actions = [
+                () => engine.craftRecipe(RECIPES.find(r => r.id === 'workbench')!),
+                () => engine.useItem(s.player.items.find(it => it.id === 'heal')!.uid),
+                () => engine.repair(axe.uid),
+                () => engine.bind(axe.uid),
+                () => engine.selectSlot(1),
+                () => engine.transfer(s.player.items.find(it => it.id === 'wood')!.uid, true),
+                () => engine.fuel('wood'),
+                () => engine.cancelJob('job'),
+                () => engine.attack(),
+            ];
+            try {
+                for (const action of actions) { action(); assert.deepEqual(s, before, mode); }
+            } finally { engine.dispose(); }
+        }
+    });
+    it('launches pain potions from the current flight altitude along the view direction', () => {
+        const { s, engine } = fixture();
+        engine.giveItem('pain', 1); s.player.y = 30; engine.toggleFlight(true);
+        s.player.yaw = .7; s.player.pitch = .9;
+        engine.useItem(s.player.items[0].uid);
+        const projectile = s.projectiles[0];
+        assert.equal(projectile.y, height(s.player.x, s.player.z) + s.player.y + 1.6);
+        assert.ok(Math.abs(Math.hypot(projectile.vx, projectile.vy, projectile.vz) - 14) < 1e-10);
+        assert.ok(Math.abs(projectile.vx + Math.sin(.7) * Math.cos(.9) * 14) < 1e-10);
+        assert.ok(Math.abs(projectile.vz + Math.cos(.7) * Math.cos(.9) * 14) < 1e-10);
+        engine.dispose();
+    });
     it('creates a usable creative world while legacy saves default to survival without changing their input', async () => {
         const s = createWorld('creative', 'creative', 'hard', 'permadeath', 'creative');
         assert.equal(s.gameMode, 'creative'); assert.equal(s.mode, 'permadeath');
