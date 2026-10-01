@@ -327,7 +327,7 @@ export class GameScene {
             const engine = this.engine;
             if (!engine)
                 return;
-            if (['Tab', 'Space', 'KeyM', 'ControlLeft'].includes(e.code) && !['INPUT', 'TEXTAREA'].includes((e.target as HTMLElement)?.tagName))
+            if (!engine.paused && ['Tab', 'Space', 'KeyM', 'ControlLeft'].includes(e.code) && !['INPUT', 'TEXTAREA'].includes((e.target as HTMLElement)?.tagName))
                 e.preventDefault();
             if (e.repeat)
                 return;
