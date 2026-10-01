@@ -87,6 +87,7 @@ export class TreeField {
                     let geometry = this.geometries.get(key);
                     if (!geometry) { geometry = treeGeometry(nodes[0].tree!, nodes[0].kind === 'hardtree'); this.geometries.set(key, geometry); }
                     const capacity = Math.max(8, 2 ** Math.ceil(Math.log2(nodes.length))), mesh = new THREE.InstancedMesh(geometry, this.material, capacity);
+                    mesh.castShadow = true; mesh.receiveShadow = true;
                     mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage); mesh.name = `trees/${key}`;
                     batch = { mesh, nodes, capacity }; this.batches.set(key, batch); this.hits.set(mesh, batch); this.root.add(mesh);
                 }

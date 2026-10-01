@@ -28,6 +28,8 @@ export class CloudLayer {
     private day = new THREE.Color(0xeeeae2);
     private seconds = NaN;
     private daylight = NaN;
+    private warmth = NaN;
+    private sunset = new THREE.Color(0xffc28c);
     constructor() {
         const colors: number[] = [], normals = this.geometry.attributes.normal;
         for (let i = 0; i < normals.count; i++) {
@@ -39,9 +41,9 @@ export class CloudLayer {
         this.mesh.frustumCulled = false;
         this.update(0, 1);
     }
-    update(seconds: number, daylight: number) {
-        if (seconds === this.seconds && daylight === this.daylight) return;
-        this.seconds = seconds; this.daylight = daylight;
+    update(seconds: number, daylight: number, warmth = 0) {
+        if (seconds === this.seconds && daylight === this.daylight && warmth === this.warmth) return;
+        this.seconds = seconds; this.daylight = daylight; this.warmth = warmth;
         for (let i = 0; i < CLOUD_COUNT; i++) {
             const center = cloudPosition(seconds, i), rotation = i * .8 + seconds * .0006;
             for (let lobe = 0; lobe < CLOUD_LOBES; lobe++) {
@@ -55,6 +57,7 @@ export class CloudLayer {
         }
         this.mesh.instanceMatrix.needsUpdate = true;
         this.material.color.lerpColors(this.night, this.day, THREE.MathUtils.clamp((daylight - .1) / .9, 0, 1));
+        this.material.color.lerp(this.sunset, warmth * .55);
     }
     dispose() { this.mesh.removeFromParent(); this.mesh.dispose(); this.geometry.dispose(); this.material.dispose(); }
 }

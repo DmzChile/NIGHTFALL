@@ -7,6 +7,8 @@ import { createViewModel, viewModelTransform } from './viewmodel';
 import { TreeField } from './trees';
 import { SkyBackdrop } from './sky';
 import { fogDensity } from './atmosphere';
+import { SceneLighting, GRAPHICS, readGraphicsQuality, saveGraphicsQuality, type GraphicsQuality } from './lighting';
+import { WaterSurface } from './water';
 import { isTree } from './woodland';
 import * as THREE from 'three';
 import { Engine } from './engine';
@@ -16,8 +18,11 @@ export class GameScene {
     renderer: THREE.WebGLRenderer;
     scene = new THREE.Scene();
     camera = new THREE.PerspectiveCamera(72, 1, .1, 240);
-    sun = new THREE.DirectionalLight(0xfff0cb, 2.4);
-    ambient = new THREE.HemisphereLight(0xb3d0cc, 0x3b4d3c, 2.1);
+    lighting = new SceneLighting();
+    sun = this.lighting.key;
+    ambient = this.lighting.ambient;
+    quality: GraphicsQuality = readGraphicsQuality();
+    waterSurface = new WaterSurface();
     trees = new TreeField();
     sky = new SkyBackdrop();
     root = new THREE.Group();
@@ -54,10 +59,11 @@ export class GameScene {
     constructor(public host: HTMLDivElement, public onPause: () => void) {
         this.preview = createWorld('미리보기', 'nightfall');
         this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false, powerPreference: 'high-performance' });
-        this.renderer.setPixelRatio(Math.min(devicePixelRatio, 1.5));
+        this.renderer.setPixelRatio(Math.min(devicePixelRatio, GRAPHICS[this.quality].pixelRatio));
         this.renderer.outputColorSpace = THREE.SRGBColorSpace;
         this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-        this.renderer.toneMappingExposure = 1.1;
+        this.renderer.toneMappingExposure = 1.06;
+        this.lighting.configure(this.renderer, this.quality);
         this.host.appendChild(this.renderer.domElement);
         this.scene.fog = new THREE.FogExp2(0xaac3bb, .0065);
         this.scene.add(this.ambient, this.sun, this.sun.target, this.root, this.trees.root, this.camera);
@@ -75,8 +81,10 @@ export class GameScene {
         g.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
         g.computeVertexNormals();
         this.ground = new THREE.Mesh(g, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 1, flatShading: true }));
+        this.ground.castShadow = true; this.ground.receiveShadow = true;
         this.scene.add(this.ground);
-        this.water = new THREE.Mesh(new THREE.PlaneGeometry(3000, 3000), new THREE.MeshStandardMaterial({ color: 0x4e8492, roughness: .3, metalness: .25 }));
+        this.water = new THREE.Mesh(new THREE.PlaneGeometry(3000, 3000), this.waterSurface.material);
+        this.water.receiveShadow = true;
         this.water.rotation.x = -Math.PI / 2;
         this.water.position.y = -1.2;
         this.scene.add(this.water);
@@ -84,6 +92,7 @@ export class GameScene {
         this.scene.add(this.effects.mesh);
         this.mesh(this.guard, 'box', 0x806347, 0, 0, 0, .55, .65, .1);
         this.mesh(this.guard, 'box', 0x4c463c, 0, 0, -.065, .07, .68, .04);
+        this.guard.traverse(o => { if (o instanceof THREE.Mesh) { o.castShadow = false; o.receiveShadow = false; } });
         this.resize = () => {
             const w = this.host.clientWidth, h = this.host.clientHeight;
             this.camera.aspect = w / h;
@@ -102,10 +111,17 @@ export class GameScene {
         }, { signal: this.events.signal });
         this.renderer.domElement.addEventListener('webglcontextrestored', () => {
             this.contextLost = false;
+            this.lighting.invalidate();
             this.engine?.notify('그래픽을 복구했습니다. 계속하기를 누르세요.');
         }, { signal: this.events.signal });
         this.installInput();
         this.loop(0);
+    }
+    setQuality(quality: GraphicsQuality) {
+        this.quality = quality; saveGraphicsQuality(quality);
+        this.renderer.setPixelRatio(Math.min(devicePixelRatio, GRAPHICS[quality].pixelRatio));
+        this.lighting.configure(this.renderer, quality);
+        this.resize();
     }
     material(color: number) {
         if (!this.materials.has(color))
@@ -121,6 +137,7 @@ export class GameScene {
     }
     mesh(g: THREE.Group, shape: string, color: number, x: number, y: number, z: number, sx: number, sy: number, sz: number) {
         const m = new THREE.Mesh(this.geo(shape), this.material(color));
+        m.castShadow = true; m.receiveShadow = true;
         m.position.set(x, y, z);
         m.scale.set(sx, sy, sz);
         g.add(m);
@@ -172,7 +189,9 @@ export class GameScene {
         if (kind === 'campfire') {
             for (let i = 0; i < 7; i++)
                 this.mesh(g, 'rock', 0x858676, Math.cos(i) * .6, .15, Math.sin(i) * .6, .22, .15, .22);
-            this.mesh(g, 'cone', 0xeaaa5f, 0, .55, 0, .35, .9, .35);
+            const flame = this.mesh(g, 'cone', 0xeaaa5f, 0, .55, 0, .35, .9, .35);
+            flame.material.emissive.setHex(0xff701e); flame.material.emissiveIntensity = 1.6;
+            flame.castShadow = false; flame.receiveShadow = false;
             const light = new THREE.PointLight(0xffac55, 8, 12, 2);
             light.position.y = 1;
             g.add(light);
@@ -221,6 +240,7 @@ export class GameScene {
         return g;
     }
     setEngine(engine: Engine | null) {
+        this.lighting.invalidate();
         this.trees.clear();
         if (this.engine) {
             this.engine.onAttack = () => {
@@ -492,6 +512,7 @@ export class GameScene {
                 this.held.clear();
                 this.held.userData.id = id;
                 this.held.add(createViewModel(id, (...args) => this.mesh(...args)));
+                this.held.traverse(o => { if (o instanceof THREE.Mesh) { o.castShadow = false; o.receiveShadow = false; } });
             }
             this.playerMotion ??= new MotionSample(p.x, p.z, s.time);
             this.playerMotion.update(p.x, p.z, s.time);
@@ -523,10 +544,8 @@ export class GameScene {
         }
         const sky = this.sky.update(this.camera, this.engine ? s.time : 430, s.blood), daylight = sky.daylight;
         (this.scene.fog as THREE.FogExp2).color.copy(sky.color);
-        this.ambient.intensity = .35 + daylight * 1.7;
-        this.sun.intensity = .1 + daylight * 2.2;
-        this.sun.target.position.copy(this.camera.position);
-        this.sun.position.copy(this.camera.position).addScaledVector(daylight > .2 ? sky.sun : sky.moon, 90);
+        this.lighting.update(this.renderer, this.camera, sky, s.blood, dt > 0);
+        this.waterSurface.update(this.engine ? s.time : this.visualTime, GRAPHICS[this.quality].ripples);
         (this.scene.fog as THREE.FogExp2).density = fogDensity(this.engine ? s.time : 430, daylight, biome(this.camera.position.x, this.camera.position.z), this.camera.position.y - 1.6);
     }
     loop = (stamp: number) => {
@@ -563,11 +582,12 @@ export class GameScene {
         this.effects.dispose();
         this.trees.dispose();
         this.sky.dispose();
+        this.lighting.dispose();
         this.renderer.dispose();
         this.ground.geometry.dispose();
         this.water.geometry.dispose();
         (this.ground.material as THREE.Material).dispose();
-        (this.water.material as THREE.Material).dispose();
+        this.waterSurface.dispose();
         for (const m of this.materials.values())
             m.dispose();
         for (const g of this.geometries.values())
