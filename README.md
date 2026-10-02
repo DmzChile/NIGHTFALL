@@ -1,6 +1,42 @@
-# NIGHTFALL · Alpha 0.54
+# NIGHTFALL · Alpha 0.55
 
 PC 키보드·마우스용 1인칭 3D 샌드박스 웹게임. 생존에서는 첫날 빈손으로 가지·돌·풀을 모아 제작대를 설치하고 밤의 몬스터를 견딘다. 크리에이티브에서는 모든 아이템을 꺼내 자유롭게 건축하고 비행할 수 있다.
+
+## Alpha 0.55 시드 기반 지형
+
+새 월드는 `three.terrain.js@3.1.1`의 ESM 생성·스무딩·높이맵 함수를 사용한다. 대규모 높낮이, 넓은 평원, 언덕, 두 줄의 산맥, 그 사이 계곡, 동쪽 고지대와 제한된 절벽을 합성한다. 풀·흙·바위 색상은 높이와 경사에 따라 섞으며 기존 저폴리 색감과 `flatShading`을 유지한다.
+
+**새 지형은 새로 만드는 월드에 적용된다. 기존 저장과 백업은 이전 지형 버전 2를 유지한다.** 버전 1과 버전 누락 저장은 기존 투사체 높이 보정 후 버전 2로 읽는다. 플레이어·시설·채집 진행·아이템을 새 지형으로 자동 이주시켜 위치를 바꾸지 않는다. 새 저장은 기존 `seed`와 `terrainVersion: 3`만 보관하며 지형 정점은 저장하지 않는다.
+
+게임은 `lib/game/world/TerrainManager.ts`를 통해 높이·법선·경사·지형 타입·보행 가능 여부를 조회한다. 지형 삼각형과 일치하는 O(1) 높이 조회, 경사 이동 제한, 도보로 접근 가능한 제단 배치, 시설 기초 높이, 능선의 조준·투사체 차폐를 연결했다. 채집·제작·인벤토리·핫바·낮/밤·크리에이티브·GLB 인스턴스 나무 시스템을 유지한다.
+
+| 항목 | 기본 지형 |
+| --- | --- |
+| 크기 / 셀 | 1,100×1,100m / 128×128 |
+| 정점 / 삼각형 | 16,641 / 32,768, 기존 80,000개에서 59.04% 감소 |
+| CPU 지형 배열·경사·접근성 캐시 | 742,677바이트, 약 0.71MiB |
+| 형상 버퍼 | 928,812바이트, 약 0.89MiB |
+| 검증 환경 CPU 중앙값 | 생성 9.08ms, 접근성 검사 9.20ms, 메시 구성 12.52ms |
+| 높이 조회 100만 회 | 21.13ms, GPU·모바일 FPS 측정이 아님 |
+
+`/terrain debug off|wireframe|height|slope|type|spawn`으로 개발 표시를 바꾼다. 기본값은 `off`이며 저장하지 않는다. `spawn`은 명령 시점의 위치를 표시하며, 갱신하려면 `off` 후 다시 켠다.
+
+153개 회귀 테스트와 TypeScript 검사, 프로덕션 빌드가 통과했다. 40개 시드에서 제단 6개의 도보 접근성과 세계수 3개를 확인했다. 검증 브라우저의 WebGL이 비활성화되어 실제 3D 플레이와 GPU·모바일 FPS 검증은 남아 있다. 아래는 실제 높이맵·정점 색상으로 만든 별도 시각화이며 게임 화면 캡처가 아니다.
+
+![시드 nightfall의 실제 지형 높이맵과 능선 단면](docs/terrain-v3-preview.png)
+
+[분석·변경 파일·생성 파이프라인·검증 보고](docs/terrain-refactor.md)
+
+```bash
+pnpm typecheck
+pnpm test
+pnpm build
+node --import tsx scripts/benchmark-terrain.mjs
+node --import tsx scripts/export-terrain-preview.mjs > .sites-runtime/terrain-preview.json
+python3 scripts/render-terrain-preview.py .sites-runtime/terrain-preview.json docs/terrain-v3-preview.png
+```
+
+별도 시각화 재생성에는 Python의 numpy·matplotlib가 필요하며 게임 실행 의존성에는 포함되지 않는다.
 
 ## 나무 GLB 실험 브랜치
 
@@ -86,6 +122,7 @@ HUD는 `lib/game/hud.tsx`의 실제 게임 컴포넌트로 분리했다. 검증�
 | `/spawn <monster> [tier] [count]` | 유효한 종/등급의 적·동물 1~10마리 소환, 전체 60마리까지 |
 | `/clear [item]` | 특정 아이템 또는 전체 소지품 삭제 |
 | `/save` | 현재 월드를 기존 저장 큐로 저장 |
+| `/terrain debug off\|wireframe\|height\|slope\|type\|spawn` | 저장하지 않는 지형 검증 표시 |
 
 예: `/give wood 99`, `/give "철 검" 1`, `/time set day`, `/tp ~10 ~`, `/spawn wolf 2 3`. 아이템 지급은 가방에 전량을 넣을 수 있을 때만 성공한다. 명령은 허용된 동작과 인수만 해석하며 코드 실행을 지원하지 않는다. 모드와 비행 여부는 스냅샷·백업에, 모드는 월드 목록에 저장한다.
 

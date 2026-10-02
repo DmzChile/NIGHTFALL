@@ -1,5 +1,7 @@
 import { starterRecipes, discoverItems, ensureProgression, recipeUnlocked } from './progression';
-import { terrainHeight, migrateTerrain, TERRAIN_VERSION } from './terrain';
+import { terrainHeight, migrateTerrain, TERRAIN_VERSION, getTerrain } from './terrain';
+import { biomeManager } from './world/BiomeManager';
+import { Vector2 } from 'three';
 import { ensureForest, isTree, nodeDefinition, treeTraits, type TreeTraits } from './woodland';
 import { validateWorldState } from './validation';
 import { ensureAwareness } from './awareness';
@@ -97,7 +99,7 @@ export type State = {
     formatVersion: 1;
     contentVersion: 1;
     generatorVersion: 1;
-    terrainVersion?: 1 | 2;
+    terrainVersion?: 1 | 2 | 3;
     forestVersion?: 1;
     id: string;
     name: string;
@@ -193,21 +195,11 @@ export const distance = (a: {
     x: number;
     z: number;
 }) => Math.hypot(a.x - b.x, a.z - b.z);
-export function height(x: number, z: number) {
-    return terrainHeight(x, z);
+export function height(x: number, z: number, world?: State) {
+    return terrainHeight(x, z, world);
 }
 export function biome(x: number, z: number) {
-    if (z > 240)
-        return '유적';
-    if (x > 230)
-        return '화산';
-    if (x < -200)
-        return '습지';
-    if (z < -210)
-        return '바위 언덕';
-    if (Math.abs(x) > 85 || Math.abs(z) > 95)
-        return '숲';
-    return '초원';
+    return biomeManager.getRegionAt(x, z);
 }
 export const capacity = (s: State) => s.player.items.some(i => i.id === 'bag') ? 32 : 24;
 export const count = (items: Stack[], id: string) => items.filter(i => i.id === id).reduce((n, i) => n + i.qty, 0);
@@ -278,6 +270,7 @@ export function createWorld(name: string, seed: string, difficulty: State['diffi
     s.player.flying = false;
     s.rng = hash(s.seed);
     const gen = { rng: hash(s.seed + 'world') };
+    const terrain = getTerrain(s);
     const node = (kind: string, x: number, z: number) => {
         const n: NodeState = { id: `node-${s.nodes.length}`, kind, x, z, hp: NODES[kind].hp, depleted: false, readyAt: 0 };
         if (isTree(n)) {
@@ -310,18 +303,23 @@ export function createWorld(name: string, seed: string, difficulty: State['diffi
         let kind = pools[b][Math.floor(random(gen) * pools[b].length)];
         if (kind === 'bird')
             kind = 'herb';
-        node(kind, x, z);
+        const spot = terrain.findResourceSpot(kind, x, z);
+        if (spot) node(kind, spot.x, spot.z);
     }
     for (let i = 0; i < 7; i++) {
         const a = i * .95;
-        s.enemies.push(makeEnemy(s, i % 3 === 0 ? 'sheep' : i % 3 === 1 ? 'cow' : 'bird', 1, Math.cos(a) * 30, Math.sin(a) * 30, true));
+        const spot = terrain.findSpawnPoint(Math.cos(a) * 30, Math.sin(a) * 30, 16, true);
+        if (spot) s.enemies.push(makeEnemy(s, i % 3 === 0 ? 'sheep' : i % 3 === 1 ? 'cow' : 'bird', 1, spot.x, spot.z, true));
     }
     for (const [kind, x, z] of [['heal_totem', 28, 28], ['challenge_totem', -65, 70], ['forest_altar', 120, 130], ['rock_altar', -20, -260], ['ruin_altar', 0, 300], ['final_altar', 60, 370]] as [
         string,
         number,
         number
-    ][])
-        s.buildings.push({ id: uuid(), kind, x, z, yaw: 0, hp: 10000, items: [], jobs: [], fuel: 0, cooldown: 0, claimed: false });
+    ][]) {
+        const spot = terrain.findFlatArea(new Vector2(x, z), 80, .32);
+        if (!spot) throw new Error('제단을 배치할 완만한 지형이 없습니다.');
+        s.buildings.push({ id: uuid(), kind, x: spot.x, z: spot.z, yaw: 0, hp: 10000, items: [], jobs: [], fuel: 0, cooldown: 0, claimed: false });
+    }
     ensureForest(s, biome);
     if (isCreative(s))
         for (const id of ['workbench', 'wall', 'chest', 'mithril_axe', 'mithril_pick', 'mithril_sword', 'strong_bow', 'bag'])

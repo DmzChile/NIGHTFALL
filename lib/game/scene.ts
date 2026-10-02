@@ -2,7 +2,9 @@ import { creaturePose, handPose, MotionSample, damp, type HandAction } from './a
 import { createCreatureRig, poseCreature, type CreatureRig } from './rig';
 import { EffectPool } from './effects';
 import type { VisualEvent } from './visual-events';
-import { terrainVertexHeight, terrainColor, TERRAIN_SIZE, TERRAIN_SEGMENTS } from './terrain';
+import { getTerrain } from './terrain';
+import type { TerrainManager } from './world/TerrainManager';
+import type { TerrainDebugMode } from './world/types';
 import { createViewModel, viewModelTransform } from './viewmodel';
 import { TreeField } from './trees';
 import { SkyBackdrop } from './sky';
@@ -17,7 +19,7 @@ import { NODES, MONSTERS } from './data';
 export class GameScene {
     renderer: THREE.WebGLRenderer;
     scene = new THREE.Scene();
-    camera = new THREE.PerspectiveCamera(72, 1, .1, 240);
+    camera = new THREE.PerspectiveCamera(72, 1, .1, 320);
     lighting = new SceneLighting();
     sun = this.lighting.key;
     ambient = this.lighting.ambient;
@@ -40,7 +42,11 @@ export class GameScene {
     guardBlend = 0;
     playerMotion: MotionSample | null = null;
     aimCenter = new THREE.Vector2();
-    ground: THREE.Mesh;
+    private readonly aimEnd = new THREE.Vector3();
+    ground: THREE.Mesh<THREE.BufferGeometry, THREE.MeshStandardMaterial>;
+    terrain: TerrainManager;
+    private terrainDebug: TerrainDebugMode | null = null;
+    private spawnMarkers: THREE.InstancedMesh | null = null;
     water: THREE.Mesh;
     objects = new Map<string, THREE.Group>();
     materials = new Map<number, THREE.MeshStandardMaterial>();
@@ -58,6 +64,7 @@ export class GameScene {
     events: AbortController;
     constructor(public host: HTMLDivElement, public onPause: () => void) {
         this.preview = createWorld('미리보기', 'nightfall');
+        this.terrain = getTerrain(this.preview);
         this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false, powerPreference: 'high-performance' });
         this.renderer.setPixelRatio(Math.min(devicePixelRatio, GRAPHICS[this.quality].pixelRatio));
         this.renderer.outputColorSpace = THREE.SRGBColorSpace;
@@ -69,20 +76,7 @@ export class GameScene {
         this.scene.add(this.ambient, this.sun, this.sun.target, this.root, this.trees.root, this.camera);
         void this.trees.loadModels().then(() => { if (!this.disposed) this.lighting.invalidate(); });
         this.sun.position.set(-30, 60, -20);
-        const g = new THREE.PlaneGeometry(TERRAIN_SIZE, TERRAIN_SIZE, TERRAIN_SEGMENTS, TERRAIN_SEGMENTS);
-        g.rotateX(-Math.PI / 2);
-        const p = g.attributes.position, colors = [];
-        for (let i = 0; i < p.count; i++) {
-            const x = p.getX(i), z = p.getZ(i);
-            p.setY(i, terrainVertexHeight(x, z));
-            const color = new THREE.Color(terrainColor(x, z, biome(x, z)));
-            color.multiplyScalar(.94 + .05 * Math.sin(x * .4 + z * .35));
-            colors.push(color.r, color.g, color.b);
-        }
-        g.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
-        g.computeVertexNormals();
-        this.ground = new THREE.Mesh(g, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 1, flatShading: true }));
-        this.ground.castShadow = true; this.ground.receiveShadow = true;
+        this.ground = this.terrain.createMesh();
         this.scene.add(this.ground);
         this.water = new THREE.Mesh(new THREE.PlaneGeometry(3000, 3000), this.waterSurface.material);
         this.water.receiveShadow = true;
@@ -243,6 +237,15 @@ export class GameScene {
     setEngine(engine: Engine | null) {
         this.lighting.invalidate();
         this.trees.clear();
+        this.clearSpawnMarkers();
+        if (!this.disposed) {
+            const terrain = getTerrain(engine?.state || this.preview);
+            if (terrain !== this.terrain) {
+                this.scene.remove(this.ground); this.ground.geometry.dispose(); this.ground.material.dispose();
+                this.terrain = terrain; this.ground = terrain.createMesh(); this.scene.add(this.ground);
+            }
+            this.terrainDebug = null;
+        }
         if (this.engine) {
             this.engine.onAttack = () => {
             };
@@ -274,12 +277,13 @@ export class GameScene {
         }
     }
     onVisual(event: VisualEvent) {
+        const s = this.engine?.state || this.preview;
         if (event.type === 'action') {
             this.handAction = event.action;
             this.actionStart = this.visualTime;
             if (event.action === 'staff' && this.engine) {
                 const p = this.engine.state.player;
-                this.effects.emit(p.x - Math.sin(p.yaw), height(p.x, p.z) + p.y + 1.5, p.z - Math.cos(p.yaw), event.item === 'fire_staff' ? 0xffb36a : 0xa1deeb, 8);
+                this.effects.emit(p.x - Math.sin(p.yaw), height(p.x, p.z, s) + p.y + 1.5, p.z - Math.cos(p.yaw), event.item === 'fire_staff' ? 0xffb36a : 0xa1deeb, 8);
             }
         }
         else if (event.type === 'gather') {
@@ -287,13 +291,13 @@ export class GameScene {
             const g = this.objects.get(event.id);
             if (g)
                 g.userData.shakeAt = this.visualTime;
-            this.effects.emit(event.x, height(event.x, event.z) + .7, event.z, NODES[event.kind].color, 10);
+            this.effects.emit(event.x, height(event.x, event.z, s) + .7, event.z, NODES[event.kind].color, 10);
         }
         else {
             const g = this.objects.get(event.id);
             if (g)
                 g.userData.hitAt = this.visualTime;
-            this.effects.emit(event.x, height(event.x, event.z) + 1, event.z, event.dead ? 0xddb474 : 0xe28e79, event.dead ? 16 : 7);
+            this.effects.emit(event.x, height(event.x, event.z, s) + 1, event.z, event.dead ? 0xddb474 : 0xe28e79, event.dead ? 16 : 7);
             if (event.dead && g) {
                 const rig = this.rigs.get(g);
                 if (rig) {
@@ -308,6 +312,23 @@ export class GameScene {
                 }
             }
         }
+    }
+    private clearSpawnMarkers() {
+        if (!this.spawnMarkers) return;
+        this.scene.remove(this.spawnMarkers); this.spawnMarkers.dispose(); this.spawnMarkers.geometry.dispose();
+        (this.spawnMarkers.material as THREE.Material).dispose(); this.spawnMarkers = null;
+    }
+    private updateTerrainDebug(s: State) {
+        const mode = this.engine?.terrainDebugMode || 'off';
+        if (mode === this.terrainDebug) return;
+        this.terrain.setDebugMode(this.ground, mode); this.clearSpawnMarkers();
+        if (mode === 'spawn') {
+            const points = [{ ...s.player, color: 0xffd275 }, ...s.nodes.map(n => ({ ...n, color: isTree(n) ? 0x77df9a : 0xd6deeb })), ...s.buildings.map(b => ({ ...b, color: 0x5ddbf1 })), ...s.enemies.map(e => ({ ...e, color: e.animal ? 0xe4b677 : 0xff657d }))];
+            const markers = new THREE.InstancedMesh(new THREE.ConeGeometry(.5, 3, 3), new THREE.MeshBasicMaterial(), points.length), matrix = new THREE.Matrix4(), color = new THREE.Color();
+            points.forEach((p, i) => { markers.setMatrixAt(i, matrix.makeTranslation(p.x, this.terrain.getHeightAt(p.x, p.z) + 1.5, p.z)); markers.setColorAt(i, color.setHex(p.color)); });
+            markers.computeBoundingSphere(); markers.name = 'terrain/spawn-debug'; this.spawnMarkers = markers; this.scene.add(markers);
+        }
+        this.terrainDebug = mode;
     }
     animateGhosts(dt: number) {
         for (const ghost of this.ghosts) {
@@ -438,10 +459,19 @@ export class GameScene {
             if (type === 'enemy' && g.userData.ready && Math.hypot(g.position.x - x, g.position.z - z) < 8) {
                 g.position.x = damp(g.position.x, x, 20, dt);
                 g.position.z = damp(g.position.z, z, 20, dt);
-                g.position.y = height(g.position.x, g.position.z);
+                g.position.y = height(g.position.x, g.position.z, s);
             }
             else
-                g.position.set(x, height(x, z), z);
+                g.position.set(x, height(x, z, s), z);
+            if (type === 'building') {
+                const foundation = this.terrain.getFoundationAt(x, z);
+                g.position.y = foundation.height;
+                if (s.terrainVersion === 3 && !g.userData.foundation) {
+                    const thickness = Math.max(.12, foundation.relief + .12);
+                    const footing = this.mesh(g, 'box', 0x706551, 0, -thickness / 2, 0, 2.2, thickness, 2.2);
+                    footing.userData.target = { kind: type, id }; g.userData.foundation = true;
+                }
+            }
             g.userData.ready = true;
             if (type !== 'enemy')
                 g.rotation.y = yaw;
@@ -456,6 +486,7 @@ export class GameScene {
                 }
             }
         this.trees.update(s, view.x, view.z, this.visualTime);
+        this.updateTerrainDebug(s);
         for (const b of s.buildings) {
             const g = put(b.id, b.kind, b.x, b.z, 'building', b.yaw);
             if (g && b.kind === 'campfire')
@@ -498,16 +529,19 @@ export class GameScene {
             }
         if (this.engine) {
             const p = s.player;
-            this.camera.position.set(p.x, height(p.x, p.z) + 1.65 + p.y, p.z);
+            this.camera.position.set(p.x, height(p.x, p.z, s) + 1.65 + p.y, p.z);
             this.camera.rotation.order = 'YXZ';
             this.camera.rotation.set(p.pitch, p.yaw, 0);
             this.camera.updateMatrixWorld();
             this.root.updateMatrixWorld(true);
             this.ray.setFromCamera(this.aimCenter, this.camera);
             this.ray.far = 18;
+            this.aimEnd.copy(this.ray.ray.direction).multiplyScalar(18).add(this.ray.ray.origin);
+            const groundHit = s.terrainVersion === 3 ? this.terrain.segmentHit(this.ray.ray.origin, this.aimEnd) : null;
             const hits = this.ray.intersectObjects([...this.root.children, this.trees.root], true);
             this.engine.target = null;
             for (const hit of hits) {
+                if (groundHit !== null && hit.distance >= groundHit * 18) break;
                 const target = this.trees.target(hit) || (hit.object.userData.target ? { ...hit.object.userData.target, distance: hit.distance } : null);
                 if (target) { this.engine.target = target; break; }
             }

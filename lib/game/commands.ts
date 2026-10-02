@@ -2,6 +2,7 @@ import type { Engine } from './engine';
 import { ITEMS, MONSTERS, day, phase } from './data';
 import { biome, distance, makeEnemy, normalizeSlots, type GameMode } from './model';
 import { nodeRadius } from './woodland';
+import { TERRAIN_DEBUG_MODES, type TerrainDebugMode } from './world/types';
 
 export type CommandResult = { ok: boolean; lines: string[] };
 export const COMMANDS = [
@@ -16,6 +17,7 @@ export const COMMANDS = [
     { name: 'spawn', usage: '/spawn <monster> [tier] [count]', description: '몬스터 / 동물 소환 · 최대 10마리', example: '/spawn zombie 1 3' },
     { name: 'clear', usage: '/clear [item]', description: '소지품 삭제 · 생략하면 가방 전체', example: '/clear wood' },
     { name: 'save', usage: '/save', description: '현재 월드 저장', example: '/save' },
+    { name: 'terrain', usage: '/terrain debug off|wireframe|height|slope|type|spawn', description: '지형 검증 표시 · 저장되지 않음', example: '/terrain debug slope' },
 ] as const;
 const success = (...lines: string[]): CommandResult => ({ ok: true, lines });
 const failure = (line: string): CommandResult => ({ ok: false, lines: [line] });
@@ -65,6 +67,12 @@ export async function executeGameCommand(engine: Engine, input: string): Promise
         return matches.length ? success(...matches.slice(0, 16).map(([id, item]) => id + ' · ' + item.name), ...(matches.length > 16 ? ['전체 ' + matches.length + '종 · /items 검색어로 좁혀 보세요.'] : [])) : failure('일치하는 아이템이 없습니다.');
     }
     if (!engine.canModify) return failure(engine.saveAccessLost ? '월드 사용 권한이 없어 명령을 실행할 수 없습니다.' : '살아 있는 월드에서만 변경 명령을 사용할 수 있습니다.');
+    if (name === 'terrain') {
+        if (args.length !== 2 || args[0] !== 'debug' || !TERRAIN_DEBUG_MODES.includes(args[1] as TerrainDebugMode)) return usage(name);
+        engine.terrainDebugMode = args[1] as TerrainDebugMode;
+        engine.onChange();
+        return success('지형 표시 · ' + args[1] + ' · 지형 버전 ' + (s.terrainVersion ?? 2), '시드 ' + s.seed + ' · ' + engine.terrain.getTerrainTypeAt(p.x, p.z) + ' · 높이 ' + engine.terrain.getHeightAt(p.x, p.z).toFixed(1) + 'm');
+    }
     if (name === 'gamemode') {
         if (args.length !== 1) return usage(name);
         const modes: Record<string, GameMode> = { '0': 'survival', '1': 'creative', survival: 'survival', creative: 'creative' };
@@ -92,6 +100,7 @@ export async function executeGameCommand(engine: Engine, input: string): Promise
         if (args.length !== 2) return usage(name);
         const x = coordinate(args[0], p.x), z = coordinate(args[1], p.z);
         if (!Number.isFinite(x) || !Number.isFinite(z) || Math.hypot(x, z) > 460) return failure('섬 안의 유효한 좌표를 입력하세요. 원점으로부터 460m 이내입니다.');
+        if (s.terrainVersion === 3 && !engine.terrain.isWalkable(x, z) && !(engine.creative && p.flying)) return failure('가파른 경사 또는 바다입니다. 걸을 수 있는 지면을 선택하세요.');
         if (s.nodes.some(n => !n.depleted && nodeRadius(n) > 0 && distance(n, { x, z }) < nodeRadius(n) + .35)
             || s.buildings.some(b => ['wall', 'chest', 'furnace', 'advanced_furnace', 'anvil'].includes(b.kind) && distance(b, { x, z }) < 1))
             return failure('나무나 구조물과 겹치는 좌표입니다. 다른 위치를 선택하세요.');
@@ -124,6 +133,7 @@ export async function executeGameCommand(engine: Engine, input: string): Promise
             return { x: p.x + Math.cos(angle) * (10 + i * 1.5), z: p.z + Math.sin(angle) * (10 + i * 1.5) };
         });
         if (positions.some(pos => Math.hypot(pos.x, pos.z) > 462)) return failure('소환할 공간이 없습니다. 섬 안쪽으로 이동하세요.');
+        if (s.terrainVersion === 3 && positions.some(pos => !engine.terrain.isWalkable(pos.x, pos.z))) return failure('근처에 소환할 완만한 지면이 부족합니다. 위치를 옮겨 주세요.');
         for (const pos of positions) {
             const enemy = makeEnemy(s, kind, tier, pos.x, pos.z, ['cow', 'sheep', 'bird'].includes(kind));
             enemy.night = 0; s.enemies.push(enemy);

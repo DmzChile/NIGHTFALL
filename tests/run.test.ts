@@ -2,6 +2,7 @@ import './game.test';
 import './features.test';
 import './animation.test';
 import './terrain.test';
+import './terrain-world.test';
 import './woodland.test';
 import './tree-models.test';
 import './atmosphere.test';

@@ -1,7 +1,8 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import type { NodeState, State } from './model';
-import { terrainHeight } from './terrain';
+import { getTerrain } from './terrain';
+import type { TerrainManager } from './world/TerrainManager';
 import { isTree, TREE_SIZES, treeColor, treeYaw, type TreeTraits } from './woodland';
 import { loadTreeTemplate, treeModelGeometry, TREE_MODEL_URLS } from './tree-models';
 import type { TreeSpecies } from './woodland';
@@ -88,13 +89,14 @@ export class TreeField {
     }
     invalidate() { this.dirty = true; }
     shake(id: string, time: number) { this.shakes.set(id, time); this.invalidate(); }
-    private write(batch: Batch, index: number, n: NodeState, angle = 0) {
-        this.position.set(n.x, terrainHeight(n.x, n.z), n.z);
+    private write(batch: Batch, index: number, n: NodeState, terrain: TerrainManager, angle = 0) {
+        this.position.set(n.x, terrain.getHeightAt(n.x, n.z), n.z);
         this.rotation.setFromEuler(this.euler.set(0, treeYaw(n), angle));
         batch.mesh.setMatrixAt(index, this.matrix.compose(this.position, this.rotation, this.scale));
         batch.mesh.instanceMatrix.needsUpdate = true;
     }
     update(s: State, x: number, z: number, time: number) {
+        const terrain = getTerrain(s);
         const layout = `${s.id}/${Math.floor(x / 8)}/${Math.floor(z / 8)}`;
         const alive = s.nodes.reduce((signature, n, i) => isTree(n) && !n.depleted ? Math.imul(signature ^ (i + 1), 16777619) : signature, 2166136261);
         if (this.dirty || layout !== this.layout || s.nodes.length !== this.count || alive !== this.alive) {
@@ -120,14 +122,14 @@ export class TreeField {
                     batch = { mesh, nodes, capacity }; this.batches.set(key, batch); this.hits.set(mesh, batch); this.root.add(mesh);
                 }
                 batch.nodes = nodes; batch.mesh.count = nodes.length;
-                nodes.forEach((n, i) => { this.write(batch!, i, n); this.instances.set(n.id, { batch: batch!, index: i, node: n }); });
+                nodes.forEach((n, i) => { this.write(batch!, i, n, terrain); this.instances.set(n.id, { batch: batch!, index: i, node: n }); });
                 batch.mesh.computeBoundingSphere();
             }
             this.layout = layout; this.count = s.nodes.length; this.alive = alive; this.dirty = false;
         }
         for (const [id, start] of this.shakes) {
             const instance = this.instances.get(id), age = Math.max(0, time - start);
-            if (instance) this.write(instance.batch, instance.index, instance.node, Math.sin(age * 45) * Math.max(0, 1 - age / .22) * .02);
+            if (instance) this.write(instance.batch, instance.index, instance.node, terrain, Math.sin(age * 45) * Math.max(0, 1 - age / .22) * .02);
             if (age >= .22 || !instance) this.shakes.delete(id);
         }
     }

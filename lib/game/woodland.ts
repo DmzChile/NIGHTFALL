@@ -1,6 +1,6 @@
 import { NODES } from './data';
 import type { NodeState, State } from './model';
-import { terrainSlope } from './terrain';
+import { terrainSlope, getTerrain } from './terrain';
 
 export type TreeSize = 'small' | 'normal' | 'large' | 'world';
 export type TreeSpecies = 'pine' | 'oak' | 'birch' | 'maple';
@@ -57,6 +57,7 @@ export function ensureForest(s: State, regionAt: (x: number, z: number) => strin
         n.hp = n.depleted ? 0 : Math.max(1, nodeDefinition(n).hp * fraction);
     }
     if (s.forestVersion === FOREST_VERSION) return;
+    const terrain = getTerrain(s);
     const rand = randomStream(s.seed + '/forest/1'), ids = new Set(s.nodes.map(n => n.id));
     // Nearby blockers are indexed so increasing density does not require all-pairs searches.
     const cells = new Map<string, { x: number; z: number; radius: number }[]>();
@@ -85,7 +86,7 @@ export function ensureForest(s: State, regionAt: (x: number, z: number) => strin
     for (const [i, x, z] of [[0, -140, -120], [1, 150, 140], [2, -120, 215]]) {
         for (let attempt = 0; attempt < 20; attempt++) {
             const px = x + (rand() - .5) * 30, pz = z + (rand() - .5) * 30;
-            if (clear(px, pz, 10) && terrainSlope(px, pz) < .35) {
+            if (clear(px, pz, 10) && terrainSlope(px, pz, s) < .35 && terrain.canSpawnResource('hardtree', px, pz)) {
                 add(`forest-world-${i}`, 'hardtree', px, pz, { size: 'world', species: 'oak', autumn: false, variant: i % 2 as 0 | 1 });
                 index(px, pz, 9); break;
             }
@@ -94,7 +95,7 @@ export function ensureForest(s: State, regionAt: (x: number, z: number) => strin
     for (let ix = -38; ix <= 38; ix++) for (let iz = -38; iz <= 38; iz++) {
         const x = ix * 12 + (rand() - .5) * 7, z = iz * 12 + (rand() - .5) * 7;
         const region = regionAt(x, z), density = region === '숲' ? .86 : region === '습지' ? .3 : region === '초원' ? .24 : 0;
-        if (rand() > density || Math.hypot(x, z) > 420 || Math.hypot(x, z) < 38 || terrainSlope(x, z) > .55) continue;
+        if (rand() > density || Math.hypot(x, z) > 420 || Math.hypot(x, z) < 38 || terrainSlope(x, z, s) > .55 || !terrain.canSpawnResource('tree', x, z)) continue;
         add(`forest-${ix}-${iz}`, region === '숲' && rand() < .2 ? 'hardtree' : 'tree', x, z);
     }
     s.forestVersion = FOREST_VERSION;
