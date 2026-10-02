@@ -2,13 +2,13 @@ import { creaturePose, handPose, MotionSample, damp, type HandAction } from './a
 import { createCreatureRig, poseCreature, type CreatureRig } from './rig';
 import { EffectPool } from './effects';
 import type { VisualEvent } from './visual-events';
-import { terrainVertexHeight, terrainColor, TERRAIN_SIZE, TERRAIN_SEGMENTS } from './terrain';
+import { terrainVertexHeight, terrainColor, TERRAIN_SIZE, TERRAIN_SEGMENTS, SEA_LEVEL } from './terrain';
 import { createViewModel, viewModelTransform } from './viewmodel';
 import { TreeField } from './trees';
 import { SkyBackdrop } from './sky';
 import { fogDensity } from './atmosphere';
 import { SceneLighting, GRAPHICS, readGraphicsQuality, saveGraphicsQuality, type GraphicsQuality } from './lighting';
-import { WaterSurface } from './water';
+import { WaterSurface, inlandWaterGeometry } from './water';
 import { isTree } from './woodland';
 import * as THREE from 'three';
 import { Engine } from './engine';
@@ -42,6 +42,8 @@ export class GameScene {
     aimCenter = new THREE.Vector2();
     ground: THREE.Mesh;
     water: THREE.Mesh;
+    inlandWater: THREE.Mesh;
+    private terrainKey = '';
     objects = new Map<string, THREE.Group>();
     materials = new Map<number, THREE.MeshStandardMaterial>();
     geometries = new Map<string, THREE.BufferGeometry>();
@@ -69,26 +71,18 @@ export class GameScene {
         this.scene.add(this.ambient, this.sun, this.sun.target, this.root, this.trees.root, this.camera);
         void this.trees.loadModels().then(() => { if (!this.disposed) this.lighting.invalidate(); });
         this.sun.position.set(-30, 60, -20);
-        const g = new THREE.PlaneGeometry(TERRAIN_SIZE, TERRAIN_SIZE, TERRAIN_SEGMENTS, TERRAIN_SEGMENTS);
-        g.rotateX(-Math.PI / 2);
-        const p = g.attributes.position, colors = [];
-        for (let i = 0; i < p.count; i++) {
-            const x = p.getX(i), z = p.getZ(i);
-            p.setY(i, terrainVertexHeight(x, z));
-            const color = new THREE.Color(terrainColor(x, z, biome(x, z)));
-            color.multiplyScalar(.94 + .05 * Math.sin(x * .4 + z * .35));
-            colors.push(color.r, color.g, color.b);
-        }
-        g.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
-        g.computeVertexNormals();
-        this.ground = new THREE.Mesh(g, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 1, flatShading: true }));
+        this.ground = new THREE.Mesh(new THREE.BufferGeometry(), new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 1, flatShading: true }));
         this.ground.castShadow = true; this.ground.receiveShadow = true;
         this.scene.add(this.ground);
         this.water = new THREE.Mesh(new THREE.PlaneGeometry(3000, 3000), this.waterSurface.material);
         this.water.receiveShadow = true;
         this.water.rotation.x = -Math.PI / 2;
-        this.water.position.y = -1.2;
+        this.water.position.y = SEA_LEVEL;
         this.scene.add(this.water);
+        this.inlandWater = new THREE.Mesh(new THREE.BufferGeometry(), this.waterSurface.material);
+        this.inlandWater.receiveShadow = true;
+        this.scene.add(this.inlandWater);
+        this.rebuildTerrain(this.preview);
         this.camera.add(this.held, this.guard);
         this.scene.add(this.effects.mesh);
         this.mesh(this.guard, 'box', 0x806347, 0, 0, 0, .55, .65, .1);
@@ -123,6 +117,28 @@ export class GameScene {
         this.renderer.setPixelRatio(Math.min(devicePixelRatio, GRAPHICS[quality].pixelRatio));
         this.lighting.configure(this.renderer, quality);
         this.resize();
+    }
+    private rebuildTerrain(world: State) {
+        const key = `${world.terrainVersion ?? 1}/${world.seed}`;
+        if (this.terrainKey === key) return;
+        const geometry = new THREE.PlaneGeometry(TERRAIN_SIZE, TERRAIN_SIZE, TERRAIN_SEGMENTS, TERRAIN_SEGMENTS);
+        geometry.rotateX(-Math.PI / 2);
+        const p = geometry.attributes.position, colors = [];
+        for (let i = 0; i < p.count; i++) {
+            const x = p.getX(i), z = p.getZ(i);
+            p.setY(i, terrainVertexHeight(x, z, world));
+            const color = new THREE.Color(terrainColor(x, z, biome(x, z), world));
+            color.multiplyScalar(.94 + .05 * Math.sin(x * .4 + z * .35));
+            colors.push(color.r, color.g, color.b);
+        }
+        geometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+        geometry.computeVertexNormals(); geometry.computeBoundingBox(); geometry.computeBoundingSphere();
+        const inland = inlandWaterGeometry(geometry, world);
+        this.ground.geometry.dispose(); this.inlandWater.geometry.dispose();
+        this.ground.geometry = geometry; this.inlandWater.geometry = inland;
+        this.inlandWater.visible = inland.getAttribute('position').count > 0;
+        this.terrainKey = key;
+        this.trees.clear(); this.lighting.invalidate();
     }
     material(color: number) {
         if (!this.materials.has(color))
@@ -252,6 +268,7 @@ export class GameScene {
             };
         }
         this.engine = engine;
+        if (!this.disposed) this.rebuildTerrain(engine?.state ?? this.preview);
         for (const g of this.objects.values())
             this.root.remove(g);
         this.objects.clear();
@@ -274,12 +291,13 @@ export class GameScene {
         }
     }
     onVisual(event: VisualEvent) {
+        const world = this.engine?.state ?? this.preview;
         if (event.type === 'action') {
             this.handAction = event.action;
             this.actionStart = this.visualTime;
             if (event.action === 'staff' && this.engine) {
                 const p = this.engine.state.player;
-                this.effects.emit(p.x - Math.sin(p.yaw), height(p.x, p.z) + p.y + 1.5, p.z - Math.cos(p.yaw), event.item === 'fire_staff' ? 0xffb36a : 0xa1deeb, 8);
+                this.effects.emit(p.x - Math.sin(p.yaw), height(p.x, p.z, world) + p.y + 1.5, p.z - Math.cos(p.yaw), event.item === 'fire_staff' ? 0xffb36a : 0xa1deeb, 8);
             }
         }
         else if (event.type === 'gather') {
@@ -287,13 +305,13 @@ export class GameScene {
             const g = this.objects.get(event.id);
             if (g)
                 g.userData.shakeAt = this.visualTime;
-            this.effects.emit(event.x, height(event.x, event.z) + .7, event.z, NODES[event.kind].color, 10);
+            this.effects.emit(event.x, height(event.x, event.z, world) + .7, event.z, NODES[event.kind].color, 10);
         }
         else {
             const g = this.objects.get(event.id);
             if (g)
                 g.userData.hitAt = this.visualTime;
-            this.effects.emit(event.x, height(event.x, event.z) + 1, event.z, event.dead ? 0xddb474 : 0xe28e79, event.dead ? 16 : 7);
+            this.effects.emit(event.x, height(event.x, event.z, world) + 1, event.z, event.dead ? 0xddb474 : 0xe28e79, event.dead ? 16 : 7);
             if (event.dead && g) {
                 const rig = this.rigs.get(g);
                 if (rig) {
@@ -416,6 +434,7 @@ export class GameScene {
     }
     sync(dt: number) {
         const s = this.engine?.state || this.preview, live = new Set<string>();
+        this.rebuildTerrain(s);
         const view = this.engine ? s.player : { x: 12, z: 35 };
         const put = (id: string, kind: string, x: number, z: number, type: string, yaw = 0) => {
             if (Math.hypot(x - view.x, z - view.z) > 140)
@@ -438,10 +457,10 @@ export class GameScene {
             if (type === 'enemy' && g.userData.ready && Math.hypot(g.position.x - x, g.position.z - z) < 8) {
                 g.position.x = damp(g.position.x, x, 20, dt);
                 g.position.z = damp(g.position.z, z, 20, dt);
-                g.position.y = height(g.position.x, g.position.z);
+                g.position.y = height(g.position.x, g.position.z, s);
             }
             else
-                g.position.set(x, height(x, z), z);
+                g.position.set(x, height(x, z, s), z);
             g.userData.ready = true;
             if (type !== 'enemy')
                 g.rotation.y = yaw;
@@ -498,7 +517,7 @@ export class GameScene {
             }
         if (this.engine) {
             const p = s.player;
-            this.camera.position.set(p.x, height(p.x, p.z) + 1.65 + p.y, p.z);
+            this.camera.position.set(p.x, height(p.x, p.z, s) + 1.65 + p.y, p.z);
             this.camera.rotation.order = 'YXZ';
             this.camera.rotation.set(p.pitch, p.yaw, 0);
             this.camera.updateMatrixWorld();
@@ -542,8 +561,9 @@ export class GameScene {
         }
         else {
             const t = this.visualTime * .025;
-            this.camera.position.set(12 + Math.sin(t) * 3, 5, 35);
-            this.camera.lookAt(-5, 3, -10);
+            const x = 12 + Math.sin(t) * 3;
+            this.camera.position.set(x, height(x, 35, s) + 5, 35);
+            this.camera.lookAt(-5, height(-5, -10, s) + 3, -10);
             this.held.visible = false;
             this.guard.visible = false;
         }
@@ -591,6 +611,7 @@ export class GameScene {
         this.renderer.dispose();
         this.ground.geometry.dispose();
         this.water.geometry.dispose();
+        this.inlandWater.geometry.dispose();
         (this.ground.material as THREE.Material).dispose();
         this.waterSurface.dispose();
         for (const m of this.materials.values())

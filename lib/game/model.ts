@@ -1,5 +1,6 @@
 import { starterRecipes, discoverItems, ensureProgression, recipeUnlocked } from './progression';
-import { terrainHeight, migrateTerrain, TERRAIN_VERSION } from './terrain';
+import { terrainHeight, migrateTerrain, TERRAIN_VERSION, type TerrainWorld } from './terrain';
+import { isDryLand } from './ground';
 import { ensureForest, isTree, nodeDefinition, treeTraits, type TreeTraits } from './woodland';
 import { validateWorldState } from './validation';
 import { ensureAwareness } from './awareness';
@@ -97,7 +98,7 @@ export type State = {
     formatVersion: 1;
     contentVersion: 1;
     generatorVersion: 1;
-    terrainVersion?: 1 | 2;
+    terrainVersion?: 1 | 2 | 3;
     forestVersion?: 1;
     id: string;
     name: string;
@@ -193,8 +194,8 @@ export const distance = (a: {
     x: number;
     z: number;
 }) => Math.hypot(a.x - b.x, a.z - b.z);
-export function height(x: number, z: number) {
-    return terrainHeight(x, z);
+export function height(x: number, z: number, world?: TerrainWorld) {
+    return terrainHeight(x, z, world);
 }
 export function biome(x: number, z: number) {
     if (z > 240)
@@ -310,6 +311,8 @@ export function createWorld(name: string, seed: string, difficulty: State['diffi
         let kind = pools[b][Math.floor(random(gen) * pools[b].length)];
         if (kind === 'bird')
             kind = 'herb';
+        if (!isDryLand(x, z, s, ['tree', 'hardtree'].includes(kind) ? 1.5 : .7))
+            continue;
         node(kind, x, z);
     }
     for (let i = 0; i < 7; i++) {

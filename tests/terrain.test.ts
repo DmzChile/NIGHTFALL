@@ -6,10 +6,11 @@ import { addItem, count, craft, createWorld, height, makeEnemy, validateState } 
 import { RECIPES } from '../lib/game/data';
 import { Engine } from '../lib/game/engine';
 import { SaveManager, pack, unpack } from '../lib/game/storage';
-import { legacyTerrainHeight, terrainHeight, terrainSlope, terrainVertexHeight, TERRAIN_SEGMENTS, TERRAIN_SIZE, TERRAIN_VERSION } from '../lib/game/terrain';
+import { legacyTerrainHeight, terrainHeight, terrainSlope, terrainVertexHeight, TERRAIN_SEGMENTS, TERRAIN_SIZE } from '../lib/game/terrain';
 
 function fixture() {
     const s = createWorld('terrain', 'terrain');
+    s.terrainVersion = 2;
     s.nodes = []; s.enemies = []; s.buildings = [];
     const storage = new SaveManager();
     storage.save = async () => Date.now();
@@ -77,10 +78,10 @@ describe('terrain and save compatibility', () => {
             s.projectiles.push({ id: crypto.randomUUID(), x: -70, z: -240, y: legacyTerrainHeight(-70, -240) + 1.6, vx: 0, vy: 2, vz: 10, life: 3, damage: 8, enemy: false, type: 'arrow' });
             const before = structuredClone(s), restored = validateState(s);
             assert.deepEqual(s, before);
-            assert.equal(restored.terrainVersion, TERRAIN_VERSION);
+            assert.equal(restored.terrainVersion, 2);
             assert.ok(Math.abs(restored.projectiles[0].y - height(-70, -240) - 1.6) < 1e-10);
             const expected = structuredClone(before);
-            expected.terrainVersion = TERRAIN_VERSION;
+            expected.terrainVersion = 2;
             expected.projectiles[0].y = restored.projectiles[0].y;
             assert.deepEqual(restored, expected);
             assert.deepEqual(validateState(restored), restored);
@@ -92,7 +93,7 @@ describe('terrain and save compatibility', () => {
         s.projectiles.push({ id: crypto.randomUUID(), x: 315, z: -40, y: legacyTerrainHeight(315, -40) + 2, vx: 1, vy: 0, vz: 0, life: 2, damage: 1, enemy: false, type: 'arrow' });
         const envelope = await pack(s), loaded = await unpack(envelope);
         assert.equal(envelope.state.terrainVersion, undefined);
-        assert.equal(loaded.terrainVersion, TERRAIN_VERSION);
+        assert.equal(loaded.terrainVersion, 2);
         assert.ok(Math.abs(loaded.projectiles[0].y - height(315, -40) - 2) < 1e-10);
         assert.deepEqual(await unpack(await pack(loaded)), loaded);
         envelope.state.projectiles[0].y++;
@@ -101,11 +102,11 @@ describe('terrain and save compatibility', () => {
     it('engine entry migrates directly supplied legacy states and leaves current states unchanged', () => {
         const s = createWorld('direct', 'direct'); delete s.terrainVersion;
         const e = new Engine(s, new SaveManager());
-        assert.equal(s.terrainVersion, TERRAIN_VERSION);
+        assert.equal(s.terrainVersion, 2);
         const before = structuredClone(s), second = new Engine(s, new SaveManager());
         assert.deepEqual(s, before);
         e.dispose(); second.dispose();
-        for (const value of [3, '2', null]) {
+        for (const value of [4, '2', null]) {
             assert.throws(() => validateState({ ...s, terrainVersion: value }), /지형 버전/);
         }
     });

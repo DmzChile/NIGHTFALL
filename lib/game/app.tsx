@@ -282,6 +282,7 @@ function App() {
             <h2>새로운 섬 만들기</h2><p className="muted">월드 이름과 플레이 방식을 정하세요.</p>
             <label>월드 이름<input value={name} onChange={ev => setName(ev.target.value)} maxLength={40}/></label>
             <label>월드 시드 · 선택<input placeholder="비워 두면 무작위 생성" value={seed} maxLength={64} onChange={ev => setSeed(ev.target.value)}/></label>
+            <p className="muted">같은 시드는 같은 산과 물길을 만듭니다. 강과 연못은 숲·습지에 나타나며 시작 초원은 완만하게 유지됩니다.</p>
             <label>플레이 모드<Choice label="플레이 모드" value={gameMode} set={value => setGameMode(value as GameMode)} values={[["survival", "생존 · 채집과 밤 전투"], ["creative", "크리에이티브 · 자유 건축과 비행"]]} /></label>
             {gameMode === 'creative' && <p className="mode-explanation creative">피해·허기·장비 소모 없이 플레이합니다. 모든 아이템, 즉시 제작, 비행과 철거를 사용할 수 있으며 적은 자연 생성되지 않습니다. 아래 규칙은 생존 모드로 전환할 때 적용됩니다.</p>}
             <label>{gameMode === 'creative' ? '생존 전환 시 난이도' : '난이도'}<Choice label="난이도" value={difficulty} set={setDifficulty} values={[['easy', '쉬움'], ['normal', '기본'], ['hard', '어려움']]}/></label>

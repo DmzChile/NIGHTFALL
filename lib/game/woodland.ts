@@ -1,6 +1,7 @@
 import { NODES } from './data';
 import type { NodeState, State } from './model';
 import { terrainSlope } from './terrain';
+import { isDryLand } from './ground';
 
 export type TreeSize = 'small' | 'normal' | 'large' | 'world';
 export type TreeSpecies = 'pine' | 'oak' | 'birch' | 'maple';
@@ -78,14 +79,14 @@ export function ensureForest(s: State, regionAt: (x: number, z: number) => strin
         if (ids.has(id)) return;
         const n: NodeState = { id, kind, x, z, hp: 0, depleted: false, readyAt: 0 };
         n.tree = traits || treeTraits(s.seed, n);
-        if (!clear(x, z, nodeRadius(n) + .7)) return;
+        if (!clear(x, z, nodeRadius(n) + .7) || !isDryLand(x, z, s, nodeRadius(n) + .7)) return;
         n.hp = nodeDefinition(n).hp; s.nodes.push(n); ids.add(id); index(x, z, nodeRadius(n) + .7);
     };
     // Three ancient trees have spacious clearings and are kept away from the starter supply ring.
     for (const [i, x, z] of [[0, -140, -120], [1, 150, 140], [2, -120, 215]]) {
         for (let attempt = 0; attempt < 20; attempt++) {
             const px = x + (rand() - .5) * 30, pz = z + (rand() - .5) * 30;
-            if (clear(px, pz, 10) && terrainSlope(px, pz) < .35) {
+            if (clear(px, pz, 10) && terrainSlope(px, pz, s) < .35 && isDryLand(px, pz, s, 3)) {
                 add(`forest-world-${i}`, 'hardtree', px, pz, { size: 'world', species: 'oak', autumn: false, variant: i % 2 as 0 | 1 });
                 index(px, pz, 9); break;
             }
@@ -94,7 +95,7 @@ export function ensureForest(s: State, regionAt: (x: number, z: number) => strin
     for (let ix = -38; ix <= 38; ix++) for (let iz = -38; iz <= 38; iz++) {
         const x = ix * 12 + (rand() - .5) * 7, z = iz * 12 + (rand() - .5) * 7;
         const region = regionAt(x, z), density = region === '숲' ? .86 : region === '습지' ? .3 : region === '초원' ? .24 : 0;
-        if (rand() > density || Math.hypot(x, z) > 420 || Math.hypot(x, z) < 38 || terrainSlope(x, z) > .55) continue;
+        if (rand() > density || Math.hypot(x, z) > 420 || Math.hypot(x, z) < 38 || terrainSlope(x, z, s) > .55) continue;
         add(`forest-${ix}-${iz}`, region === '숲' && rand() < .2 ? 'hardtree' : 'tree', x, z);
     }
     s.forestVersion = FOREST_VERSION;

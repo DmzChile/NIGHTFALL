@@ -2,6 +2,7 @@ import type { Engine } from './engine';
 import { ITEMS, MONSTERS, day, phase } from './data';
 import { biome, distance, makeEnemy, normalizeSlots, type GameMode } from './model';
 import { nodeRadius } from './woodland';
+import { isDryLand } from './ground';
 
 export type CommandResult = { ok: boolean; lines: string[] };
 export const COMMANDS = [
@@ -123,7 +124,7 @@ export async function executeGameCommand(engine: Engine, input: string): Promise
             const angle = Math.atan2(-p.z, -p.x) + (i - (amount - 1) / 2) * .12;
             return { x: p.x + Math.cos(angle) * (10 + i * 1.5), z: p.z + Math.sin(angle) * (10 + i * 1.5) };
         });
-        if (positions.some(pos => Math.hypot(pos.x, pos.z) > 462)) return failure('소환할 공간이 없습니다. 섬 안쪽으로 이동하세요.');
+        if (positions.some(pos => Math.hypot(pos.x, pos.z) > 462 || !isDryLand(pos.x, pos.z, s, .8))) return failure('소환할 마른 지면이 없습니다. 섬 안쪽의 육지로 이동하세요.');
         for (const pos of positions) {
             const enemy = makeEnemy(s, kind, tier, pos.x, pos.z, ['cow', 'sheep', 'bird'].includes(kind));
             enemy.night = 0; s.enemies.push(enemy);

@@ -1,5 +1,6 @@
 import type { VisualEvent } from './visual-events';
 import { migrateTerrain, terrainSlope } from './terrain';
+import { isDryLand, nearFishingWater } from './ground';
 import { ensureForest, isTree, nodeDefinition, nodeRadius } from './woodland';
 import { discoverItems, ensureProgression } from './progression';
 import { REGION_ENEMIES, regionWarning } from './regions';
@@ -280,7 +281,7 @@ export class Engine {
             if (it.id === 'purify')
                 p.curse = 0;
             if (it.id === 'pain') {
-                s.projectiles.push({ id: uuid(), x: p.x, y: height(p.x, p.z) + p.y + 1.6, z: p.z, vx: -Math.sin(p.yaw) * Math.cos(p.pitch) * 14, vy: Math.sin(p.pitch) * 14, vz: -Math.cos(p.yaw) * Math.cos(p.pitch) * 14, life: 4, damage: 0, enemy: false, type: 'pain' });
+                s.projectiles.push({ id: uuid(), x: p.x, y: height(p.x, p.z, s) + p.y + 1.6, z: p.z, vx: -Math.sin(p.yaw) * Math.cos(p.pitch) * 14, vy: Math.sin(p.pitch) * 14, vz: -Math.cos(p.yaw) * Math.cos(p.pitch) * 14, life: 4, damage: 0, enemy: false, type: 'pain' });
             }
             if (!this.creative) take(p.items, it.id, 1);
             p.potionAt = s.time;
@@ -463,7 +464,11 @@ export class Engine {
             this.notify('다른 물체와 겹쳐 배치할 수 없습니다.');
             return;
         }
-        if (terrainSlope(x, z) > .4) {
+        if (!isDryLand(x, z, s, 1.2)) {
+            this.notify('물가에서 떨어진 마른 지면에 배치하세요.');
+            return;
+        }
+        if (terrainSlope(x, z, s) > .4) {
             this.notify('경사가 완만한 지면에 배치하세요.');
             return;
         }
@@ -575,8 +580,8 @@ export class Engine {
             return;
         }
         if (it?.id === 'fishing_rod') {
-            if (Math.hypot(p.x, p.z) < 420) {
-                this.notify('해안 가까이에서 낚싯대를 사용하세요.');
+            if (!nearFishingWater(p.x, p.z, s)) {
+                this.notify('강·연못 또는 해안 가까이에서 낚싯대를 사용하세요.');
                 return;
             }
             p.actionAt = s.time;
@@ -615,7 +620,7 @@ export class Engine {
                 }
                 if (!this.creative) take(p.items, type, 1);
             }
-            const y = height(p.x, p.z) + p.y + 1.6, sp = type === 'arrow' || type.endsWith('arrow') ? 32 : 18;
+            const y = height(p.x, p.z, s) + p.y + 1.6, sp = type === 'arrow' || type.endsWith('arrow') ? 32 : 18;
             s.projectiles.push({ id: uuid(), x: p.x, y, z: p.z, vx: -Math.sin(p.yaw) * Math.cos(p.pitch) * sp, vy: Math.sin(p.pitch) * sp, vz: -Math.cos(p.yaw) * Math.cos(p.pitch) * sp, life: 6, damage: d?.damage || 14, enemy: false, type });
         }
         else if (this.target?.kind === 'enemy' && this.target.distance <= (d?.range || 2.2) + .4) {
@@ -829,7 +834,9 @@ export class Engine {
             for (let i = 0; i < 3; i++)
                 if (s.enemies.filter(e => e.animal).length < 10) {
                     const a = random(s) * Math.PI * 2;
-                    s.enemies.push(makeEnemy(s, i % 2 ? 'cow' : 'sheep', 1, p.x + Math.cos(a) * 35, p.z + Math.sin(a) * 35, true));
+                    const x = p.x + Math.cos(a) * 35, z = p.z + Math.sin(a) * 35;
+                    if (s.terrainVersion !== 3 || (Math.hypot(x, z) < 462 && isDryLand(x, z, s, .8)))
+                        s.enemies.push(makeEnemy(s, i % 2 ? 'cow' : 'sheep', 1, x, z, true));
                 }
         }
         if (phase(s.time) !== oldPhase) {
@@ -851,7 +858,7 @@ export class Engine {
                     let placed = false;
                     for (let tries = 0; tries < 12; tries++) {
                         const a = random(s) * Math.PI * 2, r = 25 + random(s) * 20, x = p.x + Math.cos(a) * r, z = p.z + Math.sin(a) * r;
-                        if (Math.hypot(x, z) < 462 && !s.buildings.some(b => distance(b, { x, z }) < 6)) {
+                        if (Math.hypot(x, z) < 462 && isDryLand(x, z, s, .8) && !s.buildings.some(b => distance(b, { x, z }) < 6)) {
                             e.x = x;
                             e.z = z;
                             s.enemies.push(e);
@@ -869,7 +876,7 @@ export class Engine {
     private stepPlayer(dt: number) {
         const s = this.state, p = s.player;
         const creative = this.creative, flying = creative && !!p.flying;
-        const altitude = height(p.x, p.z) + p.y;
+        const altitude = height(p.x, p.z, s) + p.y;
         if (creative) {
             Object.assign(p, { hp: 100, hunger: 100, stamina: 100, poison: 0, curse: 0, slow: 0, stagger: 0 });
         }
@@ -904,7 +911,7 @@ export class Engine {
         if (flying) {
             const vertical = (this.keys.has('Space') ? 1 : 0) - (this.keys.has('ControlLeft') || this.keys.has('ControlRight') ? 1 : 0);
             const speed = this.keys.has('ShiftLeft') || this.keys.has('ShiftRight') ? 16 : 8;
-            p.y = Math.max(0, Math.min(120, altitude + vertical * speed * dt - height(p.x, p.z)));
+            p.y = Math.max(0, Math.min(120, altitude + vertical * speed * dt - height(p.x, p.z, s)));
             p.vy = 0;
         }
         else {
@@ -1002,7 +1009,7 @@ export class Engine {
             return;
         for (let tries = 0; tries < 12; tries++) {
             const a = random(s) * Math.PI * 2, r = 28 + random(s) * 12, x = p.x + Math.cos(a) * r, z = p.z + Math.sin(a) * r;
-            if (Math.hypot(x, z) > 462 || biome(x, z) !== region || s.buildings.some(b => distance(b, { x, z }) < 8))
+            if (Math.hypot(x, z) > 462 || !isDryLand(x, z, s, .8) || biome(x, z) !== region || s.buildings.some(b => distance(b, { x, z }) < 8))
                 continue;
             const choice = pool[Math.floor(random(s) * pool.length)], enemy = makeEnemy(s, choice.kind, choice.tier, x, z);
             enemy.region = region;
@@ -1078,8 +1085,8 @@ export class Engine {
                 e.timer -= dt;
                 if (e.timer <= 0) {
                     if (d.role !== 'melee' && dist < 25) {
-                        const y = height(e.x, e.z) + 1.3;
-                        const dx = p.x - e.x, dy = height(p.x, p.z) + p.y + 1 - y, dz = p.z - e.z, l = Math.hypot(dx, dy, dz) || 1;
+                        const y = height(e.x, e.z, s) + 1.3;
+                        const dx = p.x - e.x, dy = height(p.x, p.z, s) + p.y + 1 - y, dz = p.z - e.z, l = Math.hypot(dx, dy, dz) || 1;
                         s.projectiles.push({ id: uuid(), x: e.x, y, z: e.z, vx: dx / l * 10, vy: dy / l * 10, vz: dz / l * 10, life: 5, damage: d.damage * (1 + .1 * (e.tier - d.min)), enemy: true, type: e.kind });
                     }
                     else if (dist < 2.8) {
@@ -1142,14 +1149,14 @@ export class Engine {
             for (const b of s.buildings) {
                 if (!['wall', 'door'].includes(b.kind))
                     continue;
-                const t = segmentSphere(prev, q, { x: b.x, y: height(b.x, b.z) + 1, z: b.z }, 1);
+                const t = segmentSphere(prev, q, { x: b.x, y: height(b.x, b.z, s) + 1, z: b.z }, 1);
                 if (t !== null && (contact === null || t < contact)) {
                     contact = t;
                     target = null;
                 }
             }
             if (q.enemy) {
-                const t = segmentSphere(prev, q, { x: p.x, y: height(p.x, p.z) + p.y + 1, z: p.z }, .75);
+                const t = segmentSphere(prev, q, { x: p.x, y: height(p.x, p.z, s) + p.y + 1, z: p.z }, .75);
                 if (t !== null && (contact === null || t < contact)) {
                     contact = t;
                     target = 'player';
@@ -1157,7 +1164,7 @@ export class Engine {
             }
             else
                 for (const e of s.enemies) {
-                    const t = segmentSphere(prev, q, { x: e.x, y: height(e.x, e.z) + 1, z: e.z }, .9);
+                    const t = segmentSphere(prev, q, { x: e.x, y: height(e.x, e.z, s) + 1, z: e.z }, .9);
                     if (t !== null && (contact === null || t < contact)) {
                         contact = t;
                         target = e;
@@ -1182,7 +1189,7 @@ export class Engine {
                         if (e !== target && distance(e, target) < 3)
                             this.hitEnemy(e, q.damage * .7, q.type);
             }
-            if (q.y < height(q.x, q.z) || q.life <= 0 || Math.hypot(q.x, q.z) > 490 || contact !== null)
+            if (q.y < height(q.x, q.z, s) || q.life <= 0 || Math.hypot(q.x, q.z) > 490 || contact !== null)
                 s.projectiles = s.projectiles.filter(p => p !== q);
             if (s.status !== 'alive') return;
         }
