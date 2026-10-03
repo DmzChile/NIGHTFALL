@@ -1,5 +1,6 @@
 import { NODES } from './data';
 import type { NodeState, State } from './model';
+import { isDryLand } from './ground';
 import { terrainSlope, getTerrain } from './terrain';
 
 export type TreeSize = 'small' | 'normal' | 'large' | 'world';
@@ -79,14 +80,14 @@ export function ensureForest(s: State, regionAt: (x: number, z: number) => strin
         if (ids.has(id)) return;
         const n: NodeState = { id, kind, x, z, hp: 0, depleted: false, readyAt: 0 };
         n.tree = traits || treeTraits(s.seed, n);
-        if (!clear(x, z, nodeRadius(n) + .7)) return;
+        if (!clear(x, z, nodeRadius(n) + .7) || !isDryLand(x, z, s, nodeRadius(n) + .7)) return;
         n.hp = nodeDefinition(n).hp; s.nodes.push(n); ids.add(id); index(x, z, nodeRadius(n) + .7);
     };
     // Three ancient trees have spacious clearings and are kept away from the starter supply ring.
     for (const [i, x, z] of [[0, -140, -120], [1, 150, 140], [2, -120, 215]]) {
         for (let attempt = 0; attempt < 20; attempt++) {
             const px = x + (rand() - .5) * 30, pz = z + (rand() - .5) * 30;
-            if (clear(px, pz, 10) && terrainSlope(px, pz, s) < .35 && terrain.canSpawnResource('hardtree', px, pz)) {
+            if (clear(px, pz, 10) && terrainSlope(px, pz, s) < .35 && isDryLand(px, pz, s, 3) && terrain.canSpawnResource('hardtree', px, pz)) {
                 add(`forest-world-${i}`, 'hardtree', px, pz, { size: 'world', species: 'oak', autumn: false, variant: i % 2 as 0 | 1 });
                 index(px, pz, 9); break;
             }

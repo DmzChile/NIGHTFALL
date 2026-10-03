@@ -1,4 +1,42 @@
 import * as THREE from 'three';
+import { SEA_LEVEL, WATER_DEPTH_EPSILON, terrainWaterVertexLevel, type TerrainWorld } from './terrain';
+
+type WaterVertex = { x: number; y: number; z: number; depth: number };
+
+/** Clip the ground's own triangles at the shoreline so dry banks stay uncovered. */
+export function inlandWaterGeometry(ground: THREE.BufferGeometry, world: TerrainWorld) {
+    const position = ground.getAttribute('position'), index = ground.getIndex(), vertices: (WaterVertex | null)[] = [];
+    const positions: number[] = [];
+    for (let i = 0; i < position.count; i++) {
+        const x = position.getX(i), z = position.getZ(i), y = terrainWaterVertexLevel(x, z, world);
+        vertices.push(y === null ? null : { x, y, z, depth: y - position.getY(i) - WATER_DEPTH_EPSILON });
+    }
+    const intersection = (a: WaterVertex, b: WaterVertex): WaterVertex => {
+        const t = a.depth / (a.depth - b.depth);
+        return { x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t, z: a.z + (b.z - a.z) * t, depth: 0 };
+    };
+    const count = index?.count ?? position.count;
+    for (let i = 0; i < count; i += 3) {
+        const triangle = [0, 1, 2].map(offset => vertices[index ? index.getX(i + offset) : i + offset]);
+        if (triangle.some(vertex => vertex === null)) continue;
+        const source = triangle as WaterVertex[], polygon: WaterVertex[] = [];
+        for (let j = 0; j < 3; j++) {
+            const a = source[j], b = source[(j + 1) % 3], inside = a.depth > 0, nextInside = b.depth > 0;
+            if (inside) polygon.push(a);
+            if (inside !== nextInside) polygon.push(intersection(a, b));
+        }
+        // The large ocean mesh already covers surfaces at or below sea level.
+        if (polygon.length < 3 || polygon.every(vertex => vertex.y <= SEA_LEVEL)) continue;
+        for (let j = 1; j < polygon.length - 1; j++) {
+            for (const vertex of [polygon[0], polygon[j], polygon[j + 1]]) positions.push(vertex.x, vertex.y, vertex.z);
+        }
+    }
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+    geometry.computeVertexNormals();
+    geometry.computeBoundingBox(); geometry.computeBoundingSphere();
+    return geometry;
+}
 
 /** Analytic surface normals provide moving sun highlights without a reflection pass. */
 export class WaterSurface {

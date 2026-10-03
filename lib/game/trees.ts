@@ -97,7 +97,7 @@ export class TreeField {
     }
     update(s: State, x: number, z: number, time: number) {
         const terrain = getTerrain(s);
-        const layout = `${s.id}/${Math.floor(x / 8)}/${Math.floor(z / 8)}`;
+        const layout = `${s.id}/${s.seed}/${s.terrainVersion ?? 1}/${Math.floor(x / 8)}/${Math.floor(z / 8)}`;
         const alive = s.nodes.reduce((signature, n, i) => isTree(n) && !n.depleted ? Math.imul(signature ^ (i + 1), 16777619) : signature, 2166136261);
         if (this.dirty || layout !== this.layout || s.nodes.length !== this.count || alive !== this.alive) {
             const groups = new Map<string, NodeState[]>(); this.instances.clear();

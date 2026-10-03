@@ -2,6 +2,7 @@ import type { Engine } from './engine';
 import { ITEMS, MONSTERS, day, phase } from './data';
 import { biome, distance, makeEnemy, normalizeSlots, type GameMode } from './model';
 import { nodeRadius } from './woodland';
+import { isDryLand } from './ground';
 import { TERRAIN_DEBUG_MODES, type TerrainDebugMode } from './world/types';
 
 export type CommandResult = { ok: boolean; lines: string[] };
@@ -100,7 +101,7 @@ export async function executeGameCommand(engine: Engine, input: string): Promise
         if (args.length !== 2) return usage(name);
         const x = coordinate(args[0], p.x), z = coordinate(args[1], p.z);
         if (!Number.isFinite(x) || !Number.isFinite(z) || Math.hypot(x, z) > 460) return failure('섬 안의 유효한 좌표를 입력하세요. 원점으로부터 460m 이내입니다.');
-        if (s.terrainVersion === 3 && !engine.terrain.isWalkable(x, z) && !(engine.creative && p.flying)) return failure('가파른 경사 또는 바다입니다. 걸을 수 있는 지면을 선택하세요.');
+        if ((s.terrainVersion === 3 || s.terrainVersion === 4) && !engine.terrain.isWalkable(x, z) && !(engine.creative && p.flying)) return failure('가파른 경사 또는 바다입니다. 걸을 수 있는 지면을 선택하세요.');
         if (s.nodes.some(n => !n.depleted && nodeRadius(n) > 0 && distance(n, { x, z }) < nodeRadius(n) + .35)
             || s.buildings.some(b => ['wall', 'chest', 'furnace', 'advanced_furnace', 'anvil'].includes(b.kind) && distance(b, { x, z }) < 1))
             return failure('나무나 구조물과 겹치는 좌표입니다. 다른 위치를 선택하세요.');
@@ -132,8 +133,9 @@ export async function executeGameCommand(engine: Engine, input: string): Promise
             const angle = Math.atan2(-p.z, -p.x) + (i - (amount - 1) / 2) * .12;
             return { x: p.x + Math.cos(angle) * (10 + i * 1.5), z: p.z + Math.sin(angle) * (10 + i * 1.5) };
         });
+        if (positions.some(pos => !isDryLand(pos.x, pos.z, s, .8))) return failure('소환할 마른 지면이 없습니다. 섬 안쪽의 육지로 이동하세요.');
         if (positions.some(pos => Math.hypot(pos.x, pos.z) > 462)) return failure('소환할 공간이 없습니다. 섬 안쪽으로 이동하세요.');
-        if (s.terrainVersion === 3 && positions.some(pos => !engine.terrain.isWalkable(pos.x, pos.z))) return failure('근처에 소환할 완만한 지면이 부족합니다. 위치를 옮겨 주세요.');
+        if ((s.terrainVersion === 3 || s.terrainVersion === 4) && positions.some(pos => !engine.terrain.isWalkable(pos.x, pos.z))) return failure('근처에 소환할 완만한 지면이 부족합니다. 위치를 옮겨 주세요.');
         for (const pos of positions) {
             const enemy = makeEnemy(s, kind, tier, pos.x, pos.z, ['cow', 'sheep', 'bird'].includes(kind));
             enemy.night = 0; s.enemies.push(enemy);

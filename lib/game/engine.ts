@@ -1,4 +1,5 @@
 import type { VisualEvent } from './visual-events';
+import { isDryLand, nearFishingWater } from './ground';
 import { migrateTerrain, getTerrain } from './terrain';
 import type { TerrainManager } from './world/TerrainManager';
 import type { TerrainDebugMode } from './world/types';
@@ -468,6 +469,7 @@ export class Engine {
             this.notify('다른 물체와 겹쳐 배치할 수 없습니다.');
             return;
         }
+        if (!isDryLand(x, z, s, 1.2)) { this.notify('물가에서 떨어진 마른 지면에 배치하세요.'); return; }
         if (!this.terrain.canBuildAt(x, z)) {
             this.notify('경사가 완만한 지면에 배치하세요.');
             return;
@@ -580,8 +582,8 @@ export class Engine {
             return;
         }
         if (it?.id === 'fishing_rod') {
-            if (Math.hypot(p.x, p.z) < 420) {
-                this.notify('해안 가까이에서 낚싯대를 사용하세요.');
+            if (!nearFishingWater(p.x, p.z, s)) {
+                this.notify('강·연못 또는 해안 가까이에서 낚싯대를 사용하세요.');
                 return;
             }
             p.actionAt = s.time;
@@ -767,7 +769,7 @@ export class Engine {
             return;
         const bed = s.buildings.find(b => b.id === s.player.bed);
         const x = bed?.x ?? 0, z = (bed?.z ?? 8) + 2;
-        const spot = s.terrainVersion === 3 ? this.terrain.findSpawnPoint(x, z, 16) ?? { x: 0, z: 10 } : { x, z };
+        const spot = (s.terrainVersion === 3 || s.terrainVersion === 4) ? this.terrain.findSpawnPoint(x, z, 16) ?? { x: 0, z: 10 } : { x, z };
         Object.assign(s.player, { x: spot.x, z: spot.z, y: 0, vy: 0, hp: 50, hunger: 50, stamina: 100, poison: 0, curse: 0, slow: 0, stagger: 0, poisonResist: 0, fishing: undefined, healLeft: 0, dodgeUntil: s.time + 5 });
         s.enemies = s.enemies.filter(e => !MONSTERS[e.kind].boss);
         s.status = 'alive';
@@ -838,7 +840,9 @@ export class Engine {
             for (let i = 0; i < 3; i++)
                 if (s.enemies.filter(e => e.animal).length < 10) {
                     const a = random(s) * Math.PI * 2;
-                    s.enemies.push(makeEnemy(s, i % 2 ? 'cow' : 'sheep', 1, p.x + Math.cos(a) * 35, p.z + Math.sin(a) * 35, true));
+                    const x = p.x + Math.cos(a) * 35, z = p.z + Math.sin(a) * 35;
+                    if ((s.terrainVersion !== 3 && s.terrainVersion !== 4) || (Math.hypot(x, z) < 462 && isDryLand(x, z, s, .8)))
+                        s.enemies.push(makeEnemy(s, i % 2 ? 'cow' : 'sheep', 1, x, z, true));
                 }
         }
         if (phase(s.time) !== oldPhase) {
@@ -860,7 +864,7 @@ export class Engine {
                     let placed = false;
                     for (let tries = 0; tries < 12; tries++) {
                         const a = random(s) * Math.PI * 2, r = 25 + random(s) * 20, x = p.x + Math.cos(a) * r, z = p.z + Math.sin(a) * r;
-                        if (Math.hypot(x, z) < 462 && (s.terrainVersion !== 3 || this.terrain.isWalkable(x, z)) && !s.buildings.some(b => distance(b, { x, z }) < 6)) {
+                        if (Math.hypot(x, z) < 462 && isDryLand(x, z, s, .8) && ((s.terrainVersion !== 3 && s.terrainVersion !== 4) || this.terrain.isWalkable(x, z)) && !s.buildings.some(b => distance(b, { x, z }) < 6)) {
                             e.x = x;
                             e.z = z;
                             s.enemies.push(e);
@@ -878,7 +882,7 @@ export class Engine {
     private stepPlayer(dt: number) {
         const s = this.state, p = s.player;
         const creative = this.creative, flying = creative && !!p.flying;
-        const initialGround = height(p.x, p.z, s), altitude = initialGround + p.y, initialSlope = s.terrainVersion === 3 ? this.terrain.getSlopeAt(p.x, p.z) : 0;
+        const initialGround = height(p.x, p.z, s), altitude = initialGround + p.y, initialSlope = (s.terrainVersion === 3 || s.terrainVersion === 4) ? this.terrain.getSlopeAt(p.x, p.z) : 0;
         if (creative) {
             Object.assign(p, { hp: 100, hunger: 100, stamina: 100, poison: 0, curse: 0, slow: 0, stagger: 0 });
         }
@@ -887,7 +891,7 @@ export class Engine {
                 distance(center, { x, z }) < radius || (swept && distance(center, p) > radius && segmentSphere(
                     { x: p.x, y: 0, z: p.z }, { x, y: 0, z }, { x: center.x, y: 0, z: center.z }, radius) !== null);
             return Math.hypot(x, z) > 465
-                || (s.terrainVersion === 3 && !this.terrain.canTraverse(p.x, p.z, x, z))
+                || ((s.terrainVersion === 3 || s.terrainVersion === 4) && !this.terrain.canTraverse(p.x, p.z, x, z))
                 || s.nodes.some(n => !n.depleted && nodeRadius(n) > 0 && obstacle(n, nodeRadius(n) + .35))
                 || s.buildings.some(b => (['wall', 'chest', 'furnace', 'advanced_furnace', 'anvil'].includes(b.kind) || (swept && b.kind === 'door')) && obstacle(b, swept ? 1.2 : 1));
         };
@@ -918,7 +922,7 @@ export class Engine {
             p.vy = 0;
         }
         else {
-            if (s.terrainVersion === 3 && (p.y > 0 || initialSlope >= .85 && initialGround > this.terrain.getHeightAt(p.x, p.z)))
+            if ((s.terrainVersion === 3 || s.terrainVersion === 4) && (p.y > 0 || initialSlope >= .85 && initialGround > this.terrain.getHeightAt(p.x, p.z)))
                 p.y = Math.max(0, altitude - this.terrain.getHeightAt(p.x, p.z));
             if (this.keys.has('Space') && p.y === 0 && !(p.stagger || 0))
                 p.vy = 5;
@@ -938,7 +942,7 @@ export class Engine {
                 if (!blocked(dx, dz, true)) {
                     p.x = dx;
                     p.z = dz;
-                    if (s.terrainVersion === 3 && (p.y > 0 || slope >= .85)) p.y = Math.max(0, beforeDodge - height(p.x, p.z, s));
+                    if ((s.terrainVersion === 3 || s.terrainVersion === 4) && (p.y > 0 || slope >= .85)) p.y = Math.max(0, beforeDodge - height(p.x, p.z, s));
                 }
             }
         }
@@ -1016,7 +1020,7 @@ export class Engine {
             return;
         for (let tries = 0; tries < 12; tries++) {
             const a = random(s) * Math.PI * 2, r = 28 + random(s) * 12, x = p.x + Math.cos(a) * r, z = p.z + Math.sin(a) * r;
-            if (Math.hypot(x, z) > 462 || biome(x, z) !== region || (s.terrainVersion === 3 && !this.terrain.isWalkable(x, z)) || s.buildings.some(b => distance(b, { x, z }) < 8))
+            if (Math.hypot(x, z) > 462 || !isDryLand(x, z, s, .8) || biome(x, z) !== region || ((s.terrainVersion === 3 || s.terrainVersion === 4) && !this.terrain.isWalkable(x, z)) || s.buildings.some(b => distance(b, { x, z }) < 8))
                 continue;
             const choice = pool[Math.floor(random(s) * pool.length)], enemy = makeEnemy(s, choice.kind, choice.tier, x, z);
             enemy.region = region;
@@ -1083,7 +1087,7 @@ export class Engine {
                 const a = e.timer > 0 ? Math.atan2(e.z - p.z, e.x - p.x) : s.time * .12 + parseInt(e.id.slice(0, 2), 16);
                 const speed = e.timer > 0 ? d.speed * 1.8 : d.speed * .15;
                 const x = e.x + Math.cos(a) * speed * dt, z = e.z + Math.sin(a) * speed * dt;
-                if (s.terrainVersion !== 3 || this.terrain.isWalkable(x, z)) { e.x = x; e.z = z; }
+                if ((s.terrainVersion !== 3 && s.terrainVersion !== 4) || this.terrain.isWalkable(x, z)) { e.x = x; e.z = z; }
                 continue;
             }
             if (!updateAwareness(e, dist, dt) || dist > 130)
@@ -1121,7 +1125,7 @@ export class Engine {
                         if (wall.hp <= 0)
                             this.breakBuilding(wall);
                     }
-                    else if (s.terrainVersion !== 3 || this.terrain.canTraverse(e.x, e.z, nx, nz)) {
+                    else if ((s.terrainVersion !== 3 && s.terrainVersion !== 4) || this.terrain.canTraverse(e.x, e.z, nx, nz)) {
                         e.x = nx;
                         e.z = nz;
                     }
@@ -1152,7 +1156,7 @@ export class Engine {
             q.z += q.vz * dt;
             if (q.type.includes('arrow'))
                 q.vy -= 7 * dt;
-            let contact: number | null = s.terrainVersion === 3 ? this.terrain.segmentHit(prev, q) : null;
+            let contact: number | null = (s.terrainVersion === 3 || s.terrainVersion === 4) ? this.terrain.segmentHit(prev, q) : null;
             let target: Enemy | 'player' | null = null;
             // Walls participate in the same nearest-contact query as actors.
             for (const b of s.buildings) {

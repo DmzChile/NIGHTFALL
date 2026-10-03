@@ -3,6 +3,7 @@ import { terrainGeometry } from './ThreeTerrainAdapter';
 import { biomeManager } from './BiomeManager';
 import { generateTerrain, generateLegacyTerrain } from './TerrainGenerator';
 import { legacyColor, legacyMeshHeight, legacySlope } from './LegacyTerrain';
+import { generateNaturalTerrain, terrainColor as naturalColor, terrainWaterLevel } from './NaturalTerrain';
 import { TerrainSampler } from './TerrainSampler';
 import { TERRAIN_SEGMENTS, type TerrainDebugMode, type TerrainType, type TerrainVersion, type TerrainWorld } from './types';
 
@@ -15,7 +16,7 @@ export class TerrainManager extends TerrainSampler {
     private readonly foundations = new Map<string, Foundation>();
     private reachable: Uint8Array | null = null;
     constructor(seed: string, version: TerrainVersion = 3, segments = TERRAIN_SEGMENTS) {
-        super(version === 2 ? generateLegacyTerrain() : generateTerrain(seed, segments));
+        super(version === 2 ? generateLegacyTerrain() : version === 4 ? generateNaturalTerrain(seed) : generateTerrain(seed, segments));
     }
     override getHeightAt(x: number, z: number) { return this.data.version === 2 ? legacyMeshHeight(x, z) : super.getHeightAt(x, z); }
     override getSlopeAt(x: number, z: number) { return this.data.version === 2 ? legacySlope(x, z) : super.getSlopeAt(x, z); }
@@ -33,7 +34,19 @@ export class TerrainManager extends TerrainSampler {
         if (this.foundations.size >= 512) this.foundations.delete(this.foundations.keys().next().value!);
         this.foundations.set(key, foundation); return foundation;
     }
+    isDryAt(x: number, z: number, radius = 0) {
+        if (this.data.version !== 4) return true;
+        const world = { seed: this.data.seed, terrainVersion: 4 as const };
+        const dry = (px: number, pz: number) => terrainWaterLevel(px, pz, world) === null && this.getHeightAt(px, pz) > -1.15;
+        if (!dry(x, z)) return false;
+        for (let i = 0; radius > 0 && i < 8; i++) {
+            const a = i * Math.PI / 4;
+            if (!dry(x + Math.cos(a) * radius, z + Math.sin(a) * radius)) return false;
+        }
+        return true;
+    }
     canBuildAt(x: number, z: number) {
+        if (!this.isDryAt(x, z, 1.2)) return false;
         if (this.data.version === 2) return this.getSlopeAt(x, z) <= .4;
         const f = this.getFoundationAt(x, z);
         return this.isWalkable(x, z) && f.minHeight > -.7 && f.maxSlope <= .4 && f.relief <= .8;
@@ -69,7 +82,7 @@ export class TerrainManager extends TerrainSampler {
         if (!Number.isFinite(center.x) || !Number.isFinite(center.y) || !Number.isFinite(radius) || radius < 0 || radius > 550 || !Number.isFinite(maxSlope) || maxSlope < 0) return null;
         const inspect = (x: number, z: number) => {
             const f = this.getFoundationAt(x, z);
-            return this.isWalkable(x, z) && f.maxSlope <= maxSlope && f.relief <= .8 && f.minHeight > -.7 && this.isReachableAt(x, z) ? new THREE.Vector3(x, f.height, z) : null;
+            return this.isDryAt(x, z, 3) && this.isWalkable(x, z) && f.maxSlope <= maxSlope && f.relief <= .8 && f.minHeight > -.7 && this.isReachableAt(x, z) ? new THREE.Vector3(x, f.height, z) : null;
         };
         const atCenter = inspect(center.x, center.y); if (atCenter) return atCenter;
         for (let r = 4; r <= radius; r += 4) for (let a = 0, count = Math.ceil(2 * Math.PI * r / 4); a < count; a++) {
@@ -80,6 +93,7 @@ export class TerrainManager extends TerrainSampler {
     }
     canSpawnResource(kind: string, x: number, z: number) {
         if (this.data.version === 2) return true;
+        if (this.data.version === 4) return Math.hypot(x, z) <= 465 && this.isDryAt(x, z, kind === 'tree' || kind === 'hardtree' ? 1.5 : .7) && this.getSlopeAt(x, z) < (kind === 'tree' || kind === 'hardtree' ? .55 : 1.1);
         const height = this.getHeightAt(x, z), slope = this.getSlopeAt(x, z), type = this.getTerrainTypeAt(x, z);
         if (height < -.5 || Math.hypot(x, z) > 465) return false;
         if (kind === 'tree' || kind === 'hardtree') return height < 45 && slope < .5 && ['plains', 'hills', 'valley', 'lowlands'].includes(type);
@@ -97,7 +111,7 @@ export class TerrainManager extends TerrainSampler {
         return null;
     }
     findSpawnPoint(x: number, z: number, radius = 16, animal = false) {
-        const valid = (px: number, pz: number) => this.data.version === 2 || this.isWalkable(px, pz) && (!animal || ['plains', 'lowlands', 'valley', 'hills'].includes(this.getTerrainTypeAt(px, pz)));
+        const valid = (px: number, pz: number) => this.data.version === 2 || this.isDryAt(px, pz, .8) && this.isWalkable(px, pz) && (!animal || ['plains', 'lowlands', 'valley', 'hills'].includes(this.getTerrainTypeAt(px, pz)));
         if (valid(x, z)) return { x, z };
         for (let r = 4; r <= radius; r += 4) for (let a = 0; a < 12; a++) {
             const px = x + Math.cos(a * Math.PI / 6) * r, pz = z + Math.sin(a * Math.PI / 6) * r;
@@ -119,6 +133,7 @@ export class TerrainManager extends TerrainSampler {
             if (mode === 'height') color.setHSL(.62 * (1 - Math.min(1, Math.max(0, h / 110))), .7, .48);
             else if (mode === 'slope') color.setRGB(Math.min(1, slope / 1.2), Math.max(.05, 1 - slope / 1.2), .1);
             else if (mode === 'type') color.setHex(TYPE_COLORS[this.getTerrainTypeAt(x, z)]);
+            else if (this.data.version === 4) color.setHex(naturalColor(x, z, region, { seed: this.data.seed, terrainVersion: 4 })).multiplyScalar(.94 + .05 * Math.sin(x * .4 + z * .35));
             else if (this.data.version === 2) color.setHex(legacyColor(x, z, region)).multiplyScalar(.94 + .05 * Math.sin(x * .4 + z * .35));
             else {
                 const grass = region === '습지' ? 0x567369 : region === '숲' ? 0x6a895e : 0x899c70;
@@ -142,7 +157,7 @@ export class TerrainManager extends TerrainSampler {
 const states = new WeakMap<TerrainWorld, { key: string; terrain: TerrainManager }>(), cache = new Map<string, TerrainManager>();
 /** Cache CPU heightmaps, never GPU meshes. World identity and version are explicit in every lookup. */
 export function getTerrain(world: TerrainWorld) {
-    const version = world.terrainVersion === 3 ? 3 : 2, key = version === 2 ? 'legacy/2' : `3/${world.seed}`;
+    const version = world.terrainVersion === 4 ? 4 : world.terrainVersion === 3 ? 3 : 2, key = version === 2 ? 'legacy/2' : `${version}/${world.seed}`;
     const existing = states.get(world); if (existing?.key === key) return existing.terrain;
     let terrain = cache.get(key);
     if (!terrain) {

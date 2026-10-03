@@ -1,10 +1,10 @@
 export const TERRAIN_SIZE = 1100;
 export const TERRAIN_SEGMENTS = 128;
-export const TERRAIN_VERSION = 3;
+export const TERRAIN_VERSION = 4;
 export const LEGACY_TERRAIN_VERSION = 2;
 export const SEA_LEVEL = -1.2;
 export const WALKABLE_GRADE = .85; // rise / run, about 40 degrees
-export type TerrainVersion = 2 | 3;
+export type TerrainVersion = 2 | 3 | 4;
 export type TerrainType = 'plains' | 'hills' | 'mountains' | 'valley' | 'cliffs' | 'highlands' | 'lowlands' | 'beach' | 'water';
 export type TerrainDebugMode = 'off' | 'wireframe' | 'height' | 'slope' | 'type' | 'spawn';
 export const TERRAIN_DEBUG_MODES: readonly TerrainDebugMode[] = ['off', 'wireframe', 'height', 'slope', 'type', 'spawn'];
@@ -20,7 +20,7 @@ export type TerrainData = {
     valleys: Float32Array;
     cliffs: Float32Array;
 };
-export type TerrainWorld = { seed: string; terrainVersion?: 1 | 2 | 3 };
+export type TerrainWorld = { seed: string; terrainVersion?: 1 | 2 | 3 | 4 };
 export const smoothstep = (a: number, b: number, value: number) => {
     const t = Math.max(0, Math.min(1, (value - a) / (b - a)));
     return t * t * (3 - 2 * t);

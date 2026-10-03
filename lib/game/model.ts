@@ -1,5 +1,5 @@
 import { starterRecipes, discoverItems, ensureProgression, recipeUnlocked } from './progression';
-import { terrainHeight, migrateTerrain, TERRAIN_VERSION, getTerrain } from './terrain';
+import { terrainHeight, migrateTerrain, TERRAIN_VERSION, getTerrain, type TerrainWorld } from './terrain';
 import { biomeManager } from './world/BiomeManager';
 import { Vector2 } from 'three';
 import { ensureForest, isTree, nodeDefinition, treeTraits, type TreeTraits } from './woodland';
@@ -99,7 +99,7 @@ export type State = {
     formatVersion: 1;
     contentVersion: 1;
     generatorVersion: 1;
-    terrainVersion?: 1 | 2 | 3;
+    terrainVersion?: 1 | 2 | 3 | 4;
     forestVersion?: 1;
     id: string;
     name: string;
@@ -195,7 +195,7 @@ export const distance = (a: {
     x: number;
     z: number;
 }) => Math.hypot(a.x - b.x, a.z - b.z);
-export function height(x: number, z: number, world?: State) {
+export function height(x: number, z: number, world?: TerrainWorld) {
     return terrainHeight(x, z, world);
 }
 export function biome(x: number, z: number) {

@@ -11,6 +11,7 @@ import { TreeField } from '../lib/game/trees';
 
 function fixture() {
     const s = createWorld('terrain v3', 'nightfall');
+    s.terrainVersion = 3;
     s.nodes = []; s.enemies = []; s.buildings = []; s.time = 10;
     const storage = new SaveManager(); storage.save = async () => Date.now();
     return { s, engine: new Engine(s, storage) };
@@ -73,7 +74,7 @@ describe('seeded terrain and gameplay integration', () => {
     it('retains reachable starter supplies, animal habitats, ancient trees and altar foundations', () => {
         for (const seed of ['nightfall', 'forest-test', 'terrain', 'terrain-seed-17', 'terrain-seed-39']) {
             const s = createWorld('spawn', seed), t = getTerrain(s);
-            assert.equal(s.terrainVersion, 3); assert.ok(t.isWalkable(s.player.x, s.player.z));
+            assert.equal(s.terrainVersion, 4); assert.ok(t.isWalkable(s.player.x, s.player.z));
             for (const n of s.nodes.slice(0, 35)) assert.ok(t.isWalkable(n.x, n.z), n.kind);
             for (const n of s.nodes.slice(35)) assert.ok(t.canSpawnResource(n.kind, n.x, n.z), n.id);
             assert.equal(s.nodes.filter(n => n.tree?.size === 'world').length, 3);

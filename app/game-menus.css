@@ -4,6 +4,20 @@
 .screen .menu .subtitle { margin:12px 0 24px; font-size:1rem; }
 .screen .menu h2 { margin:14px 0 12px; }
 .screen .menu label { display:block; font-size:.9375rem; color:#d9e3df; }
+.choice-field { font-size:.9375rem; color:#d9e3df; }
+.choice-field>span { display:block; }
+.game-choice { display:block; width:100%; min-width:0; margin:5px 0 16px; }
+.game-choice>summary { display:flex; align-items:center; justify-content:space-between; gap:12px; list-style:none; cursor:pointer; min-height:44px; padding:12px; border:1px solid #596e65; border-radius:5px; background:#111b20; color:#edf2ed; line-height:1.5; }
+.game-choice>summary::-webkit-details-marker { display:none; }
+.game-choice>summary>span:first-child,.choice-options button>span:first-child { min-width:0; overflow-wrap:anywhere; }
+.choice-chevron,.choice-check { flex:0 0 1.25em; text-align:center; }
+.game-choice[open]>summary { border-color:#e7ad64; }
+.game-choice[open] .choice-chevron { transform:rotate(180deg); }
+.choice-options { display:grid; gap:4px; margin-top:6px; padding:5px; border:1px solid #596e65; border-radius:5px; background:#111b20; }
+.choice-options button { display:flex; align-items:center; justify-content:space-between; gap:12px; width:100%; min-height:44px; padding:10px 12px; border:1px solid transparent; border-radius:3px; background:#17272b; color:#edf2ed; text-align:left; line-height:1.5; }
+.choice-options button[aria-pressed=true] { background:#304338; border-color:#82947b; }
+.choice-options button:hover { background:#33483e; }
+.game-choice>summary:focus-visible,.choice-options button:focus-visible { outline:2px solid #e7ad64; outline-offset:2px; }
 .menu .section-label { display:block; margin-bottom:10px; color:#b7c9c4; font-size:.875rem; }
 .latest-world { padding:18px; border:1px solid #53625c; border-radius:8px; background:#122127e6; }
 .world-summary-heading { display:flex; align-items:flex-start; justify-content:space-between; gap:14px; }
@@ -110,7 +124,7 @@
 .save-status.pending { border-color:#edb674; color:#f2d0a3; }
 .save-status span { color:#bacfc1; }
 .graphics-settings label { font-size:.9375rem; color:#d3e0d5; }
-.graphics-settings [data-slot=select-trigger] { margin:9px 0 0; }
+.graphics-settings .game-choice { margin:9px 0 0; }
 .save-warning { padding:12px; border:1px solid #b47959; background:#412c22; color:#ffd3b5; font-size:.9375rem; line-height:1.7; border-radius:5px; }
 .game-dialog .craft-guidance { border:1px solid #3e564b; background:#1b302c; padding:14px 16px; border-radius:6px; margin-bottom:18px; font-size:.9375rem; }
 .craft-guidance p { color:#e0e9d9; margin:8px 0; line-height:1.7; }
