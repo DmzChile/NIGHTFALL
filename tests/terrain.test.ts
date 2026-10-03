@@ -6,7 +6,8 @@ import { addItem, count, craft, createWorld, height, makeEnemy, validateState } 
 import { RECIPES } from '../lib/game/data';
 import { Engine } from '../lib/game/engine';
 import { SaveManager, pack, unpack } from '../lib/game/storage';
-import { legacyTerrainHeight, terrainHeight, terrainSlope, terrainVertexHeight, TERRAIN_SEGMENTS, TERRAIN_SIZE } from '../lib/game/terrain';
+import { legacyTerrainHeight, terrainHeight, terrainSlope, terrainVertexHeight, TERRAIN_SIZE } from '../lib/game/terrain';
+import { LEGACY_TERRAIN_SEGMENTS as TERRAIN_SEGMENTS } from '../lib/game/world/LegacyTerrain';
 
 function fixture() {
     const s = createWorld('terrain', 'terrain');
@@ -106,7 +107,7 @@ describe('terrain and save compatibility', () => {
         const before = structuredClone(s), second = new Engine(s, new SaveManager());
         assert.deepEqual(s, before);
         e.dispose(); second.dispose();
-        for (const value of [4, '2', null]) {
+        for (const value of [5, '2', null]) {
             assert.throws(() => validateState({ ...s, terrainVersion: value }), /지형 버전/);
         }
     });

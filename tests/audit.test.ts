@@ -51,7 +51,7 @@ describe('audit: combat, movement and death regressions', () => {
     it('dodged frost and wizard projectiles do not apply slow or curse', () => {
         for (const kind of ['frost', 'wizard']) {
             const { s, engine } = fixture(); s.player.dodgeUntil = 20;
-            s.projectiles.push({ id: crypto.randomUUID(), x: 0, z: 7.5, y: height(0, 8) + 1, vx: 0, vy: 0, vz: 10, life: 1, damage: 10, enemy: true, type: kind });
+            s.projectiles.push({ id: crypto.randomUUID(), x: 0, z: 7.5, y: height(0, 8, s) + 1, vx: 0, vy: 0, vz: 10, life: 1, damage: 10, enemy: true, type: kind });
             engine.resume(); engine.step(1 / 30);
             assert.equal(s.player.hp, 100); assert.equal(s.player.slow, 0); assert.equal(s.player.curse, 0);
             assert.equal(s.projectiles.length, 0); engine.dispose();
@@ -62,7 +62,7 @@ describe('audit: combat, movement and death regressions', () => {
         Object.assign(e, { alerted: true, state: 'windup', timer: .01 }); s.enemies.push(e);
         engine.resume(); engine.step(1 / 30); assert.equal(s.player.poison, 5); assert.ok(s.player.hp < 100);
         s.enemies = []; s.time += 1;
-        s.projectiles.push({ id: crypto.randomUUID(), x: 0, z: 7.5, y: height(0, 8) + 1, vx: 0, vy: 0, vz: 10, life: 1, damage: 10, enemy: true, type: 'frost' });
+        s.projectiles.push({ id: crypto.randomUUID(), x: 0, z: 7.5, y: height(0, 8, s) + 1, vx: 0, vy: 0, vz: 10, life: 1, damage: 10, enemy: true, type: 'frost' });
         engine.step(1 / 30); assert.equal(s.player.slow, 3); engine.dispose();
     });
     it('dodge cannot end inside a trunk or tunnel past an off-center trunk', () => {

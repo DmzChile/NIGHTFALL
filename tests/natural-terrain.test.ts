@@ -9,21 +9,20 @@ import { SaveManager, pack, unpack } from '../lib/game/storage';
 import { inlandWaterGeometry } from '../lib/game/water';
 import { isTree } from '../lib/game/woodland';
 import { TreeField } from '../lib/game/trees';
+import { getTerrain, TerrainManager } from '../lib/game/world/TerrainManager';
 import { SEA_LEVEL, TERRAIN_SEGMENTS, TERRAIN_SIZE, TERRAIN_VERSION, WATER_DEPTH_EPSILON,
-    terrainHeight, terrainSlope, terrainVertexHeight, terrainWaterLevel, type TerrainWorld } from '../lib/game/terrain';
+    terrainHeight, terrainSlope, terrainWaterLevel, type TerrainWorld } from '../lib/game/terrain';
 
 const seeds = ['nightfall', 'river-and-hills', '다채로운 섬'];
-const world = (seed: string): TerrainWorld => ({ seed, terrainVersion: 3 });
+const world = (seed: string): TerrainWorld => ({ seed, terrainVersion: 4 });
 const points: [number, number][] = [];
 for (let x = -440; x <= 440; x += 11) for (let z = -440; z <= 440; z += 11)
     if (Math.hypot(x, z) < 420) points.push([x, z]);
 
 function groundGeometry(s: TerrainWorld) {
-    const geometry = new THREE.PlaneGeometry(TERRAIN_SIZE, TERRAIN_SIZE, TERRAIN_SEGMENTS, TERRAIN_SEGMENTS);
-    geometry.rotateX(-Math.PI / 2);
-    const p = geometry.attributes.position;
-    for (let i = 0; i < p.count; i++) p.setY(i, terrainVertexHeight(p.getX(i), p.getZ(i), s));
-    return geometry;
+    const mesh = getTerrain(s).createMesh();
+    mesh.material.dispose();
+    return mesh.geometry;
 }
 function fixture(seed = seeds[0]) {
     const s = createWorld('natural terrain', seed);
@@ -33,8 +32,20 @@ function fixture(seed = seeds[0]) {
 }
 
 describe('seeded natural terrain', () => {
+    it('keeps released version 3 separate from version 4 waterways for the same seed', () => {
+        const oldWorld: TerrainWorld = { seed: seeds[0], terrainVersion: 3 };
+        const previous = new TerrainManager(seeds[0], 3), natural = getTerrain(world(seeds[0]));
+        assert.equal(getTerrain(oldWorld).data.version, 3);
+        assert.equal(natural.data.version, 4);
+        assert.equal(natural.data.segments, 200);
+        for (const [x, z] of points.filter((_, i) => i % 37 === 0)) {
+            assert.equal(terrainHeight(x, z, oldWorld), previous.getHeightAt(x, z));
+            assert.equal(terrainWaterLevel(x, z, oldWorld), null);
+        }
+        assert.notDeepEqual(getTerrain(oldWorld).data.heights, natural.data.heights);
+    });
     it('reproduces the same island from its seed, varies other seeds, and retains version 2 geometry', () => {
-        assert.equal(TERRAIN_VERSION, 3);
+        assert.equal(TERRAIN_VERSION, 4);
         const a = world(seeds[0]), b = world(seeds[1]);
         const sampled = points.filter((_, i) => i % 37 === 0);
         const profile = (s: TerrainWorld) => sampled.map(([x, z]) => [terrainHeight(x, z, s), terrainWaterLevel(x, z, s)]);
@@ -49,7 +60,7 @@ describe('seeded natural terrain', () => {
     it('keeps the starting meadow gentle and landmarks dry across different seeds', () => {
         for (const seed of seeds) {
             const s = createWorld('protected terrain', seed);
-            assert.equal(s.terrainVersion, 3);
+            assert.equal(s.terrainVersion, 4);
             for (let x = -25; x <= 25; x += 5) for (let z = -25; z <= 25; z += 5) {
                 assert.ok(Math.abs(height(x, z, s)) < 1, `${seed}: starting height ${x},${z}`);
                 assert.ok(terrainSlope(x, z, s) < .1, `${seed}: starting slope ${x},${z}`);
@@ -172,14 +183,14 @@ describe('seeded natural terrain', () => {
             const initial = rootY();
             s.seed = seeds[1]; assert.notEqual(rootY(), initial);
             s.terrainVersion = 2; rootY();
-            s.terrainVersion = 3; field.shake(n.id, 0); field.update(s, n.x, n.z, .05);
+            s.terrainVersion = 4; field.shake(n.id, 0); field.update(s, n.x, n.z, .05);
             const batch = [...field.batches.values()].find(b => b.mesh.count > 0)!;
             batch.mesh.getMatrixAt(0, matrix);
             assert.ok(Math.abs(matrix.elements[13] - height(n.x, n.z, s)) < 1e-5);
         } finally { field.dispose(); }
     });
-    it('preserves version 2 saves and round trips version 3 without moving entities or absolute projectiles', async () => {
-        for (const version of [2, 3] as const) {
+    it('preserves version 2 saves and round trips versions 3 and 4 without moving entities or absolute projectiles', async () => {
+        for (const version of [2, 3, 4] as const) {
             const s = createWorld('terrain compatibility', seeds[0]); s.terrainVersion = version;
             s.projectiles.push({ id: crypto.randomUUID(), x: -265, z: -115, y: height(-265, -115, s) + 2,
                 vx: 1, vy: 0, vz: 0, life: 2, damage: 1, enemy: false, type: 'arrow' });
@@ -187,7 +198,7 @@ describe('seeded natural terrain', () => {
             assert.deepEqual(s, before);
             assert.deepEqual(loaded, before);
             assert.deepEqual(validateState(loaded), before);
-            assert.throws(() => validateState({ ...s, terrainVersion: 4 }), /지형 버전/);
+            assert.throws(() => validateState({ ...s, terrainVersion: 5 }), /지형 버전/);
         }
     });
     it('aims ranged enemies using the seeded ground height uphill and downhill', () => {

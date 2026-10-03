@@ -53,7 +53,7 @@ describe('Creative mode and literal game commands', () => {
         s.player.yaw = .7; s.player.pitch = .9;
         engine.useItem(s.player.items[0].uid);
         const projectile = s.projectiles[0];
-        assert.equal(projectile.y, height(s.player.x, s.player.z) + s.player.y + 1.6);
+        assert.equal(projectile.y, height(s.player.x, s.player.z, s) + s.player.y + 1.6);
         assert.ok(Math.abs(Math.hypot(projectile.vx, projectile.vy, projectile.vz) - 14) < 1e-10);
         assert.ok(Math.abs(projectile.vx + Math.sin(.7) * Math.cos(.9) * 14) < 1e-10);
         assert.ok(Math.abs(projectile.vz + Math.cos(.7) * Math.cos(.9) * 14) < 1e-10);
@@ -133,9 +133,9 @@ describe('Creative mode and literal game commands', () => {
     it('flies at a stable world altitude, rises and descends, clamps height and disables flight in survival', () => {
         const { s, engine } = fixture(); s.player.y = 20; engine.toggleFlight(true); engine.resume();
         engine.keys.add('KeyW'); engine.keys.add('Space');
-        const altitude = height(s.player.x, s.player.z) + s.player.y;
+        const altitude = height(s.player.x, s.player.z, s) + s.player.y;
         engine.step(1 / 30);
-        assert.ok(Math.abs(height(s.player.x, s.player.z) + s.player.y - altitude - 8 / 30) < 1e-8);
+        assert.ok(Math.abs(height(s.player.x, s.player.z, s) + s.player.y - altitude - 8 / 30) < 1e-8);
         engine.keys.clear(); engine.keys.add('ControlLeft'); const before = s.player.y; engine.step(1 / 30);
         assert.ok(s.player.y < before);
         s.player.y = 119.99; engine.keys.clear(); engine.keys.add('Space'); engine.step(1 / 30); assert.equal(s.player.y, 120);

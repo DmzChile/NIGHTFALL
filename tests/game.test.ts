@@ -99,7 +99,7 @@ describe('save queue and schema regressions', () => {
         s.buildings = [{ id: crypto.randomUUID(), kind: 'wall', x: 0, z: 2, yaw: 0, hp: 100, items: [], jobs: [], fuel: 0 }];
         const enemy = makeEnemy(s, 'zombie', 1, 0, 4);
         s.enemies.push(enemy);
-        s.projectiles.push({ id: crypto.randomUUID(), x: 0, z: 0, y: height(0, 2) + 1, vx: 0, vy: 0, vz: 180, life: 1, damage: 10, enemy: false, type: 'arrow' });
+        s.projectiles.push({ id: crypto.randomUUID(), x: 0, z: 0, y: height(0, 2, s) + 1, vx: 0, vy: 0, vz: 180, life: 1, damage: 10, enemy: false, type: 'arrow' });
         const e = new Engine(s, new SaveManager());
         e.resume();
         e.step(1 / 30);
@@ -112,7 +112,7 @@ describe('save queue and schema regressions', () => {
         s.buildings = [];
         const far = makeEnemy(s, 'zombie', 1, 0, 4), near = makeEnemy(s, 'zombie', 1, 0, 2);
         s.enemies = [far, near];
-        s.projectiles.push({ id: crypto.randomUUID(), x: 0, z: 0, y: height(0, 2) + 1, vx: 0, vy: 0, vz: 180, life: 1, damage: 10, enemy: false, type: 'arrow' });
+        s.projectiles.push({ id: crypto.randomUUID(), x: 0, z: 0, y: height(0, 2, s) + 1, vx: 0, vy: 0, vz: 180, life: 1, damage: 10, enemy: false, type: 'arrow' });
         const e = new Engine(s, new SaveManager());
         e.resume();
         e.step(1 / 30);

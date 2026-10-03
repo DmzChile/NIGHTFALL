@@ -282,7 +282,7 @@ function App() {
         if (f)
             void importSave(f);
     }}/>
-    {menu !== 'play' && <div className="screen"><div className="menu"><span className="eyebrow">SANDBOX SURVIVAL / ALPHA 0.54</span>
+    {menu !== 'play' && <div className="screen"><div className="menu"><span className="eyebrow">SANDBOX SURVIVAL / ALPHA 0.55</span>
         {menu === 'home' ? <>
             <h1 className="wordmark">NIGHT<br />FALL</h1><p className="subtitle">낮을 준비하고, 밤을 견디다.</p>
             {worlds.length > 0 && <div className="latest-world"><span className="section-label">최근 저장한 섬</span><WorldSummary world={worlds[0]} /><button className="btn primary wide" disabled={busy} onClick={() => load(worlds[0].id)}>이 섬 이어하기</button></div>}
@@ -303,7 +303,7 @@ function App() {
             <h2>저장된 월드</h2><p className="muted">{worlds.length} / 5개 · 가장 최근 저장 순서</p><div className="world-list">{worlds.map(w => <div className="world-row" key={w.id}><WorldSummary world={w} /><div className="button-row"><button className="btn" disabled={busy} onClick={() => load(w.id)}>월드 열기</button><button className="btn danger" disabled={busy} onClick={() => setDeleteId(w.id)}>삭제</button></div></div>)}</div>{!worlds.length && <p className="empty">저장된 월드가 없습니다. 새로운 섬을 만들거나 백업 파일을 가져오세요.</p>}<button className="btn wide" disabled={busy} onClick={() => file.current?.click()}>백업 파일 가져오기</button><button className="smallbutton" onClick={() => setMenu('home')}>메인 메뉴로</button>
         </> : <><h2>조작법</h2><Controls /><button className="btn wide" onClick={() => setMenu('home')}>메인 메뉴로</button></>}
         {err && <p className="error" role="alert">{err}</p>}<p className="mobile-note">PC 키보드와 마우스가 필요한 게임입니다.</p>
-        </div><div className="menu-footer"><span>낮에는 채집. 밤에는 생존.</span><span>LOCAL SAVE / v0.54.0</span></div></div>}
+        </div><div className="menu-footer"><span>낮에는 채집. 밤에는 생존.</span><span>LOCAL SAVE / v0.55.0</span></div></div>}
         {menu === 'play' && s && p && e && <><GameHud engine={e} targetName={targetName} targetHelp={targetHelp} onSelectSlot={index => e.selectSlot(index)} /><div className="damage-flash" style={{ opacity: flash }}/>
         <Dialog open={e.paused && e.panel !== null} onOpenChange={open => {
         if (!open && !busy && s.status === 'alive')

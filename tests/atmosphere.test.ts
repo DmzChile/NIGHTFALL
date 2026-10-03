@@ -86,7 +86,7 @@ describe('enemy detection, escape and save continuity', () => {
     });
     it('a pain projectile alerts its target and preserves the vulnerability effect without direct damage', () => {
         const { s, e, engine } = fixture('zombie', 50), hp = e.hp;
-        s.projectiles.push({ id: crypto.randomUUID(), x: 48, y: height(50, 0) + 1, z: 0, vx: 10, vy: 0, vz: 0, life: 1, damage: 0, enemy: false, type: 'pain' });
+        s.projectiles.push({ id: crypto.randomUUID(), x: 48, y: height(50, 0, s) + 1, z: 0, vx: 10, vy: 0, vz: 0, life: 1, damage: 0, enemy: false, type: 'pain' });
         advance(engine, .3); assert.equal(e.hp, hp); assert.ok(e.alerted); assert.ok(e.vulnerable! > s.time); engine.dispose();
     });
     it('animals still wander and flee, without acquiring or attacking the player', () => {

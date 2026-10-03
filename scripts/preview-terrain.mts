@@ -2,7 +2,7 @@
  * Rebuild the data-derived review map from the same height/water queries as play.
  * Run from the repository root:
  *   node --import tsx scripts/preview-terrain.mts
- *   python scripts/render-terrain-preview.py
+ *   python scripts/render-natural-terrain-preview.py
  * JSON is disposable output; docs/terrain-preview.png is the review artifact.
  */
 import { mkdir, writeFile } from 'node:fs/promises';
@@ -14,9 +14,9 @@ const extent = TERRAIN_SIZE / 2;
 const spacing = TERRAIN_SIZE / (resolution - 1);
 const worlds: (TerrainWorld & { title: string; subtitle: string })[] = [
     { seed: 'nightfall', terrainVersion: 2, title: 'Before / existing worlds', subtitle: 'Version 2: fixed hills and coast' },
-    { seed: 'nightfall', terrainVersion: 3, title: 'After / nightfall', subtitle: 'Version 3: seeded hills, river and ponds' },
-    { seed: 'river-and-hills', terrainVersion: 3, title: 'After / river-and-hills', subtitle: 'Version 3: same regions, another landscape' },
-    { seed: '다채로운 섬', terrainVersion: 3, title: 'After / 다채로운 섬', subtitle: 'Version 3: Korean seed example' },
+    { seed: 'nightfall', terrainVersion: 4, title: 'After / nightfall', subtitle: 'Version 4: seeded hills, river and ponds' },
+    { seed: 'river-and-hills', terrainVersion: 4, title: 'After / river-and-hills', subtitle: 'Version 4: same regions, another landscape' },
+    { seed: '다채로운 섬', terrainVersion: 4, title: 'After / 다채로운 섬', subtitle: 'Version 4: Korean seed example' },
 ];
 const panels = worlds.map(world => {
     const heights: number[] = [], water: (number | null)[] = [];
