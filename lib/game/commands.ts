@@ -18,7 +18,7 @@ export const COMMANDS = [
     { name: 'spawn', usage: '/spawn <monster> [tier] [count]', description: '몬스터 / 동물 소환 · 최대 10마리', example: '/spawn zombie 1 3' },
     { name: 'clear', usage: '/clear [item]', description: '소지품 삭제 · 생략하면 가방 전체', example: '/clear wood' },
     { name: 'save', usage: '/save', description: '현재 월드 저장', example: '/save' },
-    { name: 'terrain', usage: '/terrain debug off|wireframe|height|slope|type|spawn', description: '지형 검증 표시 · 저장되지 않음', example: '/terrain debug slope' },
+    { name: 'terrain', usage: '/terrain info | /terrain debug off|wireframe|height|slope|type|spawn', description: '현재 지형 정보 또는 검증 표시 · 저장되지 않음', example: '/terrain info' },
 ] as const;
 const success = (...lines: string[]): CommandResult => ({ ok: true, lines });
 const failure = (line: string): CommandResult => ({ ok: false, lines: [line] });
@@ -66,6 +66,12 @@ export async function executeGameCommand(engine: Engine, input: string): Promise
         const query = args.join(' ').toLowerCase();
         const matches = Object.entries(ITEMS).filter(([id, item]) => (id + ' ' + item.name).toLowerCase().includes(query));
         return matches.length ? success(...matches.slice(0, 16).map(([id, item]) => id + ' · ' + item.name), ...(matches.length > 16 ? ['전체 ' + matches.length + '종 · /items 검색어로 좁혀 보세요.'] : [])) : failure('일치하는 아이템이 없습니다.');
+    }
+    if (name === 'terrain' && (!args.length || (args.length === 1 && args[0] === 'info'))) {
+        const t = engine.terrain, { version, segments } = t.data;
+        const generator = version === 3 ? 'THREE.Terrain · 계층형 지형' : version === 4 ? '자연 지형 · 강·연못' : '기존 고정 지형';
+        return success(generator + ' · 지형 버전 ' + version + ' · ' + segments + '×' + segments,
+            '시드 ' + s.seed + ' · ' + t.getTerrainTypeAt(p.x, p.z) + ' · 높이 ' + t.getHeightAt(p.x, p.z).toFixed(1) + 'm · 경사 ' + (Math.atan(t.getSlopeAt(p.x, p.z)) * 180 / Math.PI).toFixed(1) + '°');
     }
     if (!engine.canModify) return failure(engine.saveAccessLost ? '월드 사용 권한이 없어 명령을 실행할 수 없습니다.' : '살아 있는 월드에서만 변경 명령을 사용할 수 있습니다.');
     if (name === 'terrain') {

@@ -1,6 +1,6 @@
 # NIGHTFALL Alpha 0.55 버전 3 지형 개편 보고
 
-이 문서는 버전 3 도입 당시의 구현·측정 기록이다. 현재 새 월드는 버전 4의 자연 지형과 물길을 생성하며, 기존 버전 2·3 저장은 각각의 높이맵을 보존한다. 버전 4도 TerrainManager의 경사 이동·시설 기초·투사체 차폐·디버그 API를 사용한다. 생성기는 `world/NaturalTerrain.ts`, 수면은 `water.ts`, 호환 규칙은 `terrain.ts`와 `docs/architecture.md`를 참고한다.
+이 문서는 버전 3 도입 당시의 구현·측정 기록이다. 현재 새 월드는 기본적으로 이 문서의 THREE.Terrain 버전 3을 생성하며, **완만한 산 · 강 · 연못** 선택 시 버전 4를 생성한다. 기존 버전 2·3·4 저장은 각각의 높이맵을 보존한다. 버전 4도 TerrainManager의 경사 이동·시설 기초·투사체 차폐·디버그 API를 사용한다. 선택 옵션의 생성기는 `world/NaturalTerrain.ts`, 수면은 `water.ts`, 호환 규칙은 `terrain.ts`와 `docs/architecture.md`, 복구 이력은 [생성 경로 점검 보고](terrain-routing-audit.md)를 참고한다.
 
 새 월드에는 시드 기반 지형 버전 3을 적용했다. 기존 저장과 백업에는 버전 2의 높이·자원 위치·구조물 위치를 유지한다. 기준 소스는 GitHub `main`의 `f426883d4dfad8f86a4dfa2d8fcc911ed7825e60`이며, 병합된 나무 GLB와 게임 로직 수정도 포함한다.
 

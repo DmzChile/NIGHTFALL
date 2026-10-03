@@ -17,6 +17,7 @@ import { ITEMS, MONSTERS, RECIPES, phase, day } from './data';
 import { InventoryView, StackGrid } from './inventory-ui';
 import { CommandConsole, CreativeCatalog } from './sandbox-ui';
 import { GameHud } from './hud';
+import { DEFAULT_TERRAIN_VERSION, type NewTerrainVersion } from './terrain';
 
 const difficultyLabel = (value: string) => value === 'easy' ? '쉬움' : value === 'hard' ? '어려움' : '기본';
 const modeLabel = (value: string) => value === 'permadeath' ? '영구 사망' : '일반 생존';
@@ -53,6 +54,7 @@ function GraphicsControls({ scene }: { scene: GameScene | null }) {
 }
 function App() {
     const canvas = useRef<HTMLDivElement>(null), scene = useRef<GameScene | null>(null), storage = useRef<SaveManager | null>(null), engine = useRef<Engine | null>(null), file = useRef<HTMLInputElement>(null);
+    const [terrainVersion, setTerrainVersion] = useState<NewTerrainVersion>(DEFAULT_TERRAIN_VERSION);
     const [, refresh] = useState(0), [activeEngine, setActiveEngine] = useState<Engine | null>(null), [now, setNow] = useState(() => Date.now()), [flash, setFlash] = useState(0), [menu, setMenu] = useState('home'), [worlds, setWorlds] = useState<WorldInfo[]>([]), [busy, setBusy] = useState(false), [err, setErr] = useState(''), [name, setName] = useState('첫 번째 섬'), [seed, setSeed] = useState(''), [difficulty, setDifficulty] = useState('normal'), [mode, setMode] = useState('normal'), [gameMode, setGameMode] = useState<GameMode>('survival'), [deleteId, setDeleteId] = useState<string | null>(null), [discardExit, setDiscardExit] = useState(false), [recovery, setRecovery] = useState<State | null>(null), [inspected, setInspected] = useState<string | null>(null), [tab, setTab] = useState('items');
     const rerender = useCallback(() => {
         refresh(v => v + 1);
@@ -118,7 +120,7 @@ function App() {
         setBusy(true);
         setErr('');
         try {
-            const s = createWorld(name, seed, difficulty as State['difficulty'], mode as State['mode'], gameMode);
+            const s = createWorld(name, seed, difficulty as State['difficulty'], mode as State['mode'], gameMode, terrainVersion);
             await storage.current!.acquire(s.id);
             await storage.current!.save(s);
             attach(s);
@@ -292,7 +294,8 @@ function App() {
             <h2>새로운 섬 만들기</h2><p className="muted">월드 이름과 플레이 방식을 정하세요.</p>
             <label>월드 이름<input value={name} onChange={ev => setName(ev.target.value)} maxLength={40}/></label>
             <label>월드 시드 · 선택<input placeholder="비워 두면 무작위 생성" value={seed} maxLength={64} onChange={ev => setSeed(ev.target.value)}/></label>
-            <p className="muted">같은 시드는 같은 산과 물길을 만듭니다. 강과 연못은 숲·습지에 나타나며 시작 초원은 완만하게 유지됩니다.</p>
+            <div className="choice-field"><span>지형</span><Choice label="지형" value={String(terrainVersion)} set={value => setTerrainVersion(value === '4' ? 4 : 3)} values={[["3", "평원 · 산맥 · 계곡"], ["4", "완만한 산 · 강 · 연못"]]} /></div>
+            <p className="muted">같은 시드와 지형 선택은 같은 섬을 만듭니다. {terrainVersion === 3 ? '넓은 평원, 길게 이어지는 산맥과 계곡이 생성됩니다.' : '강과 연못은 숲·습지에 나타나며 시작 초원은 완만하게 유지됩니다.'}</p>
             <div className="choice-field"><span>플레이 모드</span><Choice label="플레이 모드" value={gameMode} set={value => setGameMode(value as GameMode)} values={[["survival", "생존 · 채집과 밤 전투"], ["creative", "크리에이티브 · 자유 건축과 비행"]]} /></div>
             {gameMode === 'creative' && <p className="mode-explanation creative">피해·허기·장비 소모 없이 플레이합니다. 모든 아이템, 즉시 제작, 비행과 철거를 사용할 수 있으며 적은 자연 생성되지 않습니다. 아래 규칙은 생존 모드로 전환할 때 적용됩니다.</p>}
             <div className="choice-field"><span>{gameMode === 'creative' ? '생존 전환 시 난이도' : '난이도'}</span><Choice label="난이도" value={difficulty} set={setDifficulty} values={[['easy', '쉬움'], ['normal', '기본'], ['hard', '어려움']]}/></div>

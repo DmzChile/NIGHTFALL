@@ -25,7 +25,7 @@ function groundGeometry(s: TerrainWorld) {
     return mesh.geometry;
 }
 function fixture(seed = seeds[0]) {
-    const s = createWorld('natural terrain', seed);
+    const s = createWorld('natural terrain', seed, 'normal', 'normal', 'survival', 4);
     s.nodes = []; s.enemies = []; s.buildings = [];
     const storage = new SaveManager(); storage.save = async () => Date.now();
     return { s, engine: new Engine(s, storage) };
@@ -59,7 +59,7 @@ describe('seeded natural terrain', () => {
     });
     it('keeps the starting meadow gentle and landmarks dry across different seeds', () => {
         for (const seed of seeds) {
-            const s = createWorld('protected terrain', seed);
+            const s = createWorld('protected terrain', seed, 'normal', 'normal', 'survival', 4);
             assert.equal(s.terrainVersion, 4);
             for (let x = -25; x <= 25; x += 5) for (let z = -25; z <= 25; z += 5) {
                 assert.ok(Math.abs(height(x, z, s)) < 1, `${seed}: starting height ${x},${z}`);
@@ -161,7 +161,7 @@ describe('seeded natural terrain', () => {
     });
     it('keeps generated resources and forests out of rivers and ponds without losing the starter supply', () => {
         for (const seed of seeds) {
-            const s = createWorld('dry resources', seed);
+            const s = createWorld('dry resources', seed, 'normal', 'normal', 'survival', 4);
             assert.ok(s.nodes.filter(isTree).length > 800);
             assert.equal(s.nodes.slice(0, 28).filter(n => n.kind === 'fiber').length, 14);
             for (const n of s.nodes) assert.equal(terrainWaterLevel(n.x, n.z, s), null, `${seed}: submerged ${n.id}`);
@@ -169,7 +169,7 @@ describe('seeded natural terrain', () => {
         }
     });
     it('moves instanced tree roots with the world seed and terrain version, including cached and shaken trees', () => {
-        const s = createWorld('tree terrain', seeds[0]);
+        const s = createWorld('tree terrain', seeds[0], 'normal', 'normal', 'survival', 4);
         const n = s.nodes.find(isTree)!; n.x = 100; n.z = -120; s.nodes = [n];
         const field = new TreeField(), matrix = new THREE.Matrix4();
         const rootY = () => {
@@ -191,7 +191,7 @@ describe('seeded natural terrain', () => {
     });
     it('preserves version 2 saves and round trips versions 3 and 4 without moving entities or absolute projectiles', async () => {
         for (const version of [2, 3, 4] as const) {
-            const s = createWorld('terrain compatibility', seeds[0]); s.terrainVersion = version;
+            const s = createWorld('terrain compatibility', seeds[0], 'normal', 'normal', 'survival', version === 2 ? 3 : version); s.terrainVersion = version;
             s.projectiles.push({ id: crypto.randomUUID(), x: -265, z: -115, y: height(-265, -115, s) + 2,
                 vx: 1, vy: 0, vz: 0, life: 2, damage: 1, enemy: false, type: 'arrow' });
             const before = structuredClone(s), loaded = await unpack(await pack(s));

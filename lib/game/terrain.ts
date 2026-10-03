@@ -3,11 +3,11 @@ import type { TerrainWorld } from './world/types';
 import { getTerrain } from './world/TerrainManager';
 import { legacyMeshHeight, legacySlope, legacyTerrainHeight, terrainVertexHeight as legacyVertexHeight } from './world/LegacyTerrain';
 import { terrainColor as naturalColor, terrainVertexHeight as naturalVertexHeight } from './world/NaturalTerrain';
-export { TERRAIN_SIZE, TERRAIN_VERSION, LEGACY_TERRAIN_VERSION, SEA_LEVEL } from './world/types';
+export { TERRAIN_SIZE, TERRAIN_VERSION, DEFAULT_TERRAIN_VERSION, LEGACY_TERRAIN_VERSION, SEA_LEVEL } from './world/types';
 export { NATURAL_TERRAIN_SEGMENTS as TERRAIN_SEGMENTS, WATER_DEPTH_EPSILON, terrainWaterVertexLevel, terrainWaterLevel } from './world/NaturalTerrain';
 export { legacyTerrainHeight } from './world/LegacyTerrain';
 export { getTerrain } from './world/TerrainManager';
-export type { TerrainWorld } from './world/types';
+export type { TerrainWorld, NewTerrainVersion } from './world/types';
 /** Omitted world remains the immutable version-2 compatibility API. */
 export function terrainHeight(x: number, z: number, world?: TerrainWorld) { return world ? getTerrain(world).getHeightAt(x, z) : legacyMeshHeight(x, z); }
 export function terrainSlope(x: number, z: number, world?: TerrainWorld) { return world ? getTerrain(world).getSlopeAt(x, z) : legacySlope(x, z); }

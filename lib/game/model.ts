@@ -1,5 +1,5 @@
 import { starterRecipes, discoverItems, ensureProgression, recipeUnlocked } from './progression';
-import { terrainHeight, migrateTerrain, TERRAIN_VERSION, getTerrain, type TerrainWorld } from './terrain';
+import { terrainHeight, migrateTerrain, DEFAULT_TERRAIN_VERSION, getTerrain, type TerrainWorld, type NewTerrainVersion } from './terrain';
 import { biomeManager } from './world/BiomeManager';
 import { Vector2 } from 'three';
 import { ensureForest, isTree, nodeDefinition, treeTraits, type TreeTraits } from './woodland';
@@ -264,8 +264,9 @@ export function addItem(s: State, id: string, qty: number) {
     return ok;
 }
 export const isCreative = (s: State) => s.gameMode === 'creative';
-export function createWorld(name: string, seed: string, difficulty: State['difficulty'] = 'normal', mode: State['mode'] = 'normal', gameMode: GameMode = 'survival'): State {
-    const s: State = { formatVersion: 1, contentVersion: 1, generatorVersion: 1, terrainVersion: TERRAIN_VERSION, id: uuid(), name: name.slice(0, 40) || '새로운 섬', seed: seed.slice(0, 64) || uuid().slice(0, 8), difficulty, mode, status: 'alive', time: 0, tick: 0, rng: 1, created: Date.now(), generation: 0, player: { x: 0, z: 8, y: 0, vy: 0, yaw: 0, pitch: 0, hp: 100, hunger: 100, stamina: 100, items: [], hotbar: Array(8).fill(null), selected: 0, armor: null, hitAt: -10, actionAt: -10, potionAt: -20, foodAt: -3, dodgeUntil: 0, poison: 0, curse: 0, slow: 0, healLeft: 0, healRate: 0, bed: null }, nodes: [], buildings: [], enemies: [], projectiles: [], drops: [], previousKills: 0, kills: {}, nightPlan: [], nightWave: 0, blood: false, lastBlood: 0, quests: [], discovered: ['초원'], knownItems: [], unlockedRecipes: starterRecipes(), regionNext: {} };
+export function createWorld(name: string, seed: string, difficulty: State['difficulty'] = 'normal', mode: State['mode'] = 'normal', gameMode: GameMode = 'survival', terrainVersion: NewTerrainVersion = DEFAULT_TERRAIN_VERSION): State {
+    if (terrainVersion !== 3 && terrainVersion !== 4) throw new Error('새 월드의 지형 버전을 확인하세요.');
+    const s: State = { formatVersion: 1, contentVersion: 1, generatorVersion: 1, terrainVersion, id: uuid(), name: name.slice(0, 40) || '새로운 섬', seed: seed.slice(0, 64) || uuid().slice(0, 8), difficulty, mode, status: 'alive', time: 0, tick: 0, rng: 1, created: Date.now(), generation: 0, player: { x: 0, z: 8, y: 0, vy: 0, yaw: 0, pitch: 0, hp: 100, hunger: 100, stamina: 100, items: [], hotbar: Array(8).fill(null), selected: 0, armor: null, hitAt: -10, actionAt: -10, potionAt: -20, foodAt: -3, dodgeUntil: 0, poison: 0, curse: 0, slow: 0, healLeft: 0, healRate: 0, bed: null }, nodes: [], buildings: [], enemies: [], projectiles: [], drops: [], previousKills: 0, kills: {}, nightPlan: [], nightWave: 0, blood: false, lastBlood: 0, quests: [], discovered: ['초원'], knownItems: [], unlockedRecipes: starterRecipes(), regionNext: {} };
     s.gameMode = gameMode;
     s.player.flying = false;
     s.rng = hash(s.seed);

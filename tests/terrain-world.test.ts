@@ -6,12 +6,12 @@ import { Engine } from '../lib/game/engine';
 import { addItem, count, createWorld, height, makeEnemy, validateState } from '../lib/game/model';
 import { SaveManager, pack, unpack } from '../lib/game/storage';
 import { getTerrain, TerrainManager } from '../lib/game/world/TerrainManager';
-import { WALKABLE_GRADE } from '../lib/game/world/types';
+import { DEFAULT_TERRAIN_VERSION, WALKABLE_GRADE, type NewTerrainVersion, type TerrainVersion } from '../lib/game/world/types';
 import { TreeField } from '../lib/game/trees';
 
-function fixture() {
-    const s = createWorld('terrain v3', 'nightfall');
-    s.terrainVersion = 3;
+function fixture(version: TerrainVersion = 3) {
+    const s = createWorld('terrain v3', 'nightfall', 'normal', 'normal', 'survival', version === 2 ? 3 : version);
+    s.terrainVersion = version;
     s.nodes = []; s.enemies = []; s.buildings = []; s.time = 10;
     const storage = new SaveManager(); storage.save = async () => Date.now();
     return { s, engine: new Engine(s, storage) };
@@ -23,6 +23,40 @@ function steep(t: TerrainManager) {
 }
 
 describe('seeded terrain and gameplay integration', () => {
+    it('routes new survival, creative and preview worlds through the released THREE.Terrain generator by default', () => {
+        assert.equal(DEFAULT_TERRAIN_VERSION, 3);
+        const expected = new TerrainManager('terrain-routing', 3);
+        for (const mode of ['survival', 'creative'] as const) {
+            const s = createWorld('default terrain', 'terrain-routing', 'normal', 'normal', mode), t = getTerrain(s);
+            assert.equal(s.terrainVersion, 3); assert.equal(s.gameMode, mode);
+            assert.equal(t.data.version, 3); assert.equal(t.data.segments, 128);
+            assert.deepEqual(t.data.heights, expected.data.heights);
+            const mesh = t.createMesh();
+            try { assert.equal(mesh.geometry.index!.count / 3, 32768); }
+            finally { mesh.geometry.dispose(); mesh.material.dispose(); }
+        }
+        assert.equal(createWorld('preview', 'terrain-routing').terrainVersion, 3);
+        for (const invalid of [1, 2, 5, NaN] as unknown as NewTerrainVersion[]) {
+            assert.throws(() => createWorld('invalid', 'terrain-routing', 'normal', 'normal', 'survival', invalid), /지형 버전/);
+        }
+    });
+    it('reports the active generator and resolution without changing a world or its debug display', async () => {
+        for (const version of [2, 3, 4] as const) {
+            const { s, engine } = fixture(version); engine.terrainDebugMode = 'slope';
+            const before = structuredClone(s);
+            try {
+                const result = await engine.command('/terrain info');
+                assert.equal(result.ok, true);
+                assert.match(result.lines[0], new RegExp('지형 버전 ' + version));
+                assert.match(result.lines[0], version === 3 ? /THREE\.Terrain.*128×128/ : version === 4 ? /강·연못.*200×200/ : /기존 고정 지형/);
+                assert.deepEqual(s, before); assert.equal(engine.terrainDebugMode, 'slope');
+                s.status = 'ended';
+                assert.equal((await engine.command('/terrain')).ok, true);
+                assert.equal((await engine.command('/terrain debug off')).ok, false);
+                assert.equal(engine.terrainDebugMode, 'slope');
+            } finally { engine.dispose(); }
+        }
+    });
     it('reproduces heightmaps without using Math.random or advancing world randomness', () => {
         const random = Math.random;
         let a: TerrainManager;
@@ -74,7 +108,7 @@ describe('seeded terrain and gameplay integration', () => {
     it('retains reachable starter supplies, animal habitats, ancient trees and altar foundations', () => {
         for (const seed of ['nightfall', 'forest-test', 'terrain', 'terrain-seed-17', 'terrain-seed-39']) {
             const s = createWorld('spawn', seed), t = getTerrain(s);
-            assert.equal(s.terrainVersion, 4); assert.ok(t.isWalkable(s.player.x, s.player.z));
+            assert.equal(s.terrainVersion, 3); assert.ok(t.isWalkable(s.player.x, s.player.z));
             for (const n of s.nodes.slice(0, 35)) assert.ok(t.isWalkable(n.x, n.z), n.kind);
             for (const n of s.nodes.slice(35)) assert.ok(t.canSpawnResource(n.kind, n.x, n.z), n.id);
             assert.equal(s.nodes.filter(n => n.tree?.size === 'world').length, 3);
