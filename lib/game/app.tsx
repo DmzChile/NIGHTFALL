@@ -6,7 +6,6 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { createRoot } from 'react-dom/client';
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
-import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select';
 import { Progress } from '@/components/ui/progress';
 import { AlertDialog, AlertDialogContent, AlertDialogTitle, AlertDialogDescription, AlertDialogFooter, AlertDialogCancel, AlertDialogAction } from '@/components/ui/alert-dialog';
 import { GameScene } from './scene';
@@ -33,13 +32,24 @@ function Choice({ value, set, values, label }: {
         string
     ][];
 }) {
-    return <Select value={value} onValueChange={set}><SelectTrigger aria-label={label} className="w-full min-h-11 mb-4"><SelectValue /></SelectTrigger><SelectContent>{values.map(([v, n]) => <SelectItem value={v} key={v}>{n}</SelectItem>)}</SelectContent></Select>;
+    const details = useRef<HTMLDetailsElement>(null);
+    const selectedText = values.find(([v]) => v === value)?.[1] ?? value;
+    const close = () => {
+        if (!details.current) return;
+        details.current.open = false;
+        details.current.querySelector('summary')?.focus();
+    };
+    return <details className="game-choice" ref={details} onKeyDown={event => {
+        if (event.key === 'Escape' && details.current?.open) {
+            event.preventDefault(); event.stopPropagation(); close();
+        }
+    }}><summary aria-label={`${label ?? '선택'}: ${selectedText}`}><span>{selectedText}</span><span className="choice-chevron" aria-hidden="true">⌄</span></summary><div className="choice-options" role="group" aria-label={label}>{values.map(([v, n]) => <button type="button" key={v} aria-pressed={value === v} onClick={() => { set(v); close(); }}><span>{n}</span><span className="choice-check" aria-hidden="true">{value === v ? '✓' : ''}</span></button>)}</div></details>;
 }
 function GraphicsControls({ scene }: { scene: GameScene | null }) {
     const [quality, setQuality] = useState<GraphicsQuality>(scene?.quality || 'medium');
-    return <div className="graphics-settings"><label>시각 품질<Choice label="시각 품질" value={quality} set={value => {
+    return <div className="graphics-settings"><div className="choice-field"><span>시각 품질</span><Choice label="시각 품질" value={quality} set={value => {
         const next = graphicsQuality(value); scene?.setQuality(next); setQuality(next);
-    }} values={[[ 'low', '낮음 · 그림자 끄기' ], [ 'medium', '보통 · 그림자' ], [ 'high', '높음 · 선명한 그림자' ]]} /></label><p className="action-note">게임이 느리면 낮음을 선택하세요. 설정은 이 브라우저에 저장됩니다.</p></div>;
+    }} values={[[ 'low', '낮음 · 그림자 끄기' ], [ 'medium', '보통 · 그림자' ], [ 'high', '높음 · 선명한 그림자' ]]} /></div><p className="action-note">게임이 느리면 낮음을 선택하세요. 설정은 이 브라우저에 저장됩니다.</p></div>;
 }
 function App() {
     const canvas = useRef<HTMLDivElement>(null), scene = useRef<GameScene | null>(null), storage = useRef<SaveManager | null>(null), engine = useRef<Engine | null>(null), file = useRef<HTMLInputElement>(null);
@@ -283,10 +293,10 @@ function App() {
             <label>월드 이름<input value={name} onChange={ev => setName(ev.target.value)} maxLength={40}/></label>
             <label>월드 시드 · 선택<input placeholder="비워 두면 무작위 생성" value={seed} maxLength={64} onChange={ev => setSeed(ev.target.value)}/></label>
             <p className="muted">같은 시드는 같은 산과 물길을 만듭니다. 강과 연못은 숲·습지에 나타나며 시작 초원은 완만하게 유지됩니다.</p>
-            <label>플레이 모드<Choice label="플레이 모드" value={gameMode} set={value => setGameMode(value as GameMode)} values={[["survival", "생존 · 채집과 밤 전투"], ["creative", "크리에이티브 · 자유 건축과 비행"]]} /></label>
+            <div className="choice-field"><span>플레이 모드</span><Choice label="플레이 모드" value={gameMode} set={value => setGameMode(value as GameMode)} values={[["survival", "생존 · 채집과 밤 전투"], ["creative", "크리에이티브 · 자유 건축과 비행"]]} /></div>
             {gameMode === 'creative' && <p className="mode-explanation creative">피해·허기·장비 소모 없이 플레이합니다. 모든 아이템, 즉시 제작, 비행과 철거를 사용할 수 있으며 적은 자연 생성되지 않습니다. 아래 규칙은 생존 모드로 전환할 때 적용됩니다.</p>}
-            <label>{gameMode === 'creative' ? '생존 전환 시 난이도' : '난이도'}<Choice label="난이도" value={difficulty} set={setDifficulty} values={[['easy', '쉬움'], ['normal', '기본'], ['hard', '어려움']]}/></label>
-            <label>{gameMode === 'creative' ? '생존 전환 시 사망 규칙' : '사망 규칙'}<Choice label="사망 규칙" value={mode} set={setMode} values={[['normal', '일반 생존'], ['permadeath', '영구 사망']]}/></label>
+            <div className="choice-field"><span>{gameMode === 'creative' ? '생존 전환 시 난이도' : '난이도'}</span><Choice label="난이도" value={difficulty} set={setDifficulty} values={[['easy', '쉬움'], ['normal', '기본'], ['hard', '어려움']]}/></div>
+            <div className="choice-field"><span>{gameMode === 'creative' ? '생존 전환 시 사망 규칙' : '사망 규칙'}</span><Choice label="사망 규칙" value={mode} set={setMode} values={[['normal', '일반 생존'], ['permadeath', '영구 사망']]}/></div>
             <p className={`mode-explanation ${mode === 'permadeath' ? 'warning' : ''}`}>{mode === 'permadeath' ? '사망하면 생존이 종료됩니다. 이 월드에서는 다시 부활할 수 없습니다.' : '사망하면 침낭 또는 시작 지점에서 부활하며, 사망 지점의 가방에서 소지품을 회수할 수 있습니다.'}</p>
             <button className="btn primary wide" disabled={busy} onClick={() => void start()}>{busy ? '섬을 생성하는 중…' : '섬에 들어가기'}</button><button className="smallbutton" onClick={() => setMenu('home')}>메인 메뉴로</button>
         </> : menu === 'worlds' ? <>
