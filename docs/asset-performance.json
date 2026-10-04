@@ -1,0 +1,576 @@
+{
+  "measuredAt": "2026-10-04T11:25:11.609Z",
+  "runtime": "v24.19.0",
+  "seed": "nightfall",
+  "measurement": "CPU preparation only; no GPU render, frustum culling or shadow passes. Loaded from local disk, not network.",
+  "assets": 76,
+  "totalTriangles": 11056,
+  "totalGlbBytes": 751920,
+  "localParseAndBakeMs": 83.46,
+  "modelCache": {
+    "loaded": 76,
+    "failed": 0,
+    "geometryBytes": 1459392,
+    "textureBytes": 0
+  },
+  "rows": [
+    {
+      "terrainVersion": 3,
+      "view": "spawn",
+      "x": 0,
+      "z": 8,
+      "quality": "low",
+      "worldObjects": 4527,
+      "colliders": 193,
+      "camps": 4,
+      "ruins": 3,
+      "worldAndTerrainGenerationMs": 115.22,
+      "preparedUpdateMs": 9.48,
+      "trees": {
+        "instances": 300,
+        "draws": 7,
+        "triangles": 62656
+      },
+      "resources": {
+        "instances": 53,
+        "triangles": 4439,
+        "draws": 8
+      },
+      "environment": {
+        "instances": 76,
+        "triangles": 4784,
+        "draws": 25
+      },
+      "preparedBatches": 40,
+      "preparedTriangles": 71879,
+      "legacyProceduralTreeBatches": 68
+    },
+    {
+      "terrainVersion": 3,
+      "view": "spawn",
+      "x": 0,
+      "z": 8,
+      "quality": "medium",
+      "worldObjects": 4527,
+      "colliders": 193,
+      "camps": 4,
+      "ruins": 3,
+      "worldAndTerrainGenerationMs": 115.22,
+      "preparedUpdateMs": 1.76,
+      "trees": {
+        "instances": 300,
+        "draws": 7,
+        "triangles": 62656
+      },
+      "resources": {
+        "instances": 53,
+        "triangles": 4439,
+        "draws": 8
+      },
+      "environment": {
+        "instances": 152,
+        "triangles": 7712,
+        "draws": 25
+      },
+      "preparedBatches": 40,
+      "preparedTriangles": 74807,
+      "legacyProceduralTreeBatches": 68
+    },
+    {
+      "terrainVersion": 3,
+      "view": "spawn",
+      "x": 0,
+      "z": 8,
+      "quality": "high",
+      "worldObjects": 4527,
+      "colliders": 193,
+      "camps": 4,
+      "ruins": 3,
+      "worldAndTerrainGenerationMs": 115.22,
+      "preparedUpdateMs": 1.93,
+      "trees": {
+        "instances": 300,
+        "draws": 7,
+        "triangles": 62656
+      },
+      "resources": {
+        "instances": 53,
+        "triangles": 4439,
+        "draws": 8
+      },
+      "environment": {
+        "instances": 234,
+        "triangles": 10866,
+        "draws": 25
+      },
+      "preparedBatches": 40,
+      "preparedTriangles": 77961,
+      "legacyProceduralTreeBatches": 68
+    },
+    {
+      "terrainVersion": 3,
+      "view": "camp",
+      "x": 105.75325379497372,
+      "z": 42.47817658819258,
+      "quality": "low",
+      "worldObjects": 4527,
+      "colliders": 193,
+      "camps": 4,
+      "ruins": 3,
+      "worldAndTerrainGenerationMs": 115.22,
+      "preparedUpdateMs": 2.51,
+      "trees": {
+        "instances": 332,
+        "draws": 7,
+        "triangles": 67272
+      },
+      "resources": {
+        "instances": 57,
+        "triangles": 4766,
+        "draws": 9
+      },
+      "environment": {
+        "instances": 70,
+        "triangles": 5757,
+        "draws": 28
+      },
+      "preparedBatches": 44,
+      "preparedTriangles": 77795,
+      "legacyProceduralTreeBatches": 75
+    },
+    {
+      "terrainVersion": 3,
+      "view": "camp",
+      "x": 105.75325379497372,
+      "z": 42.47817658819258,
+      "quality": "medium",
+      "worldObjects": 4527,
+      "colliders": 193,
+      "camps": 4,
+      "ruins": 3,
+      "worldAndTerrainGenerationMs": 115.22,
+      "preparedUpdateMs": 0.86,
+      "trees": {
+        "instances": 332,
+        "draws": 7,
+        "triangles": 67272
+      },
+      "resources": {
+        "instances": 57,
+        "triangles": 4766,
+        "draws": 9
+      },
+      "environment": {
+        "instances": 151,
+        "triangles": 13095,
+        "draws": 30
+      },
+      "preparedBatches": 46,
+      "preparedTriangles": 85133,
+      "legacyProceduralTreeBatches": 75
+    },
+    {
+      "terrainVersion": 3,
+      "view": "camp",
+      "x": 105.75325379497372,
+      "z": 42.47817658819258,
+      "quality": "high",
+      "worldObjects": 4527,
+      "colliders": 193,
+      "camps": 4,
+      "ruins": 3,
+      "worldAndTerrainGenerationMs": 115.22,
+      "preparedUpdateMs": 0.76,
+      "trees": {
+        "instances": 332,
+        "draws": 7,
+        "triangles": 67272
+      },
+      "resources": {
+        "instances": 57,
+        "triangles": 4766,
+        "draws": 9
+      },
+      "environment": {
+        "instances": 226,
+        "triangles": 19261,
+        "draws": 30
+      },
+      "preparedBatches": 46,
+      "preparedTriangles": 91299,
+      "legacyProceduralTreeBatches": 75
+    },
+    {
+      "terrainVersion": 3,
+      "view": "ruin",
+      "x": -10.037339595146477,
+      "z": 280.0154867733363,
+      "quality": "low",
+      "worldObjects": 4527,
+      "colliders": 193,
+      "camps": 4,
+      "ruins": 3,
+      "worldAndTerrainGenerationMs": 115.22,
+      "preparedUpdateMs": 1.4,
+      "trees": {
+        "instances": 104,
+        "draws": 7,
+        "triangles": 24468
+      },
+      "resources": {
+        "instances": 44,
+        "triangles": 5190,
+        "draws": 8
+      },
+      "environment": {
+        "instances": 79,
+        "triangles": 8068,
+        "draws": 17
+      },
+      "preparedBatches": 32,
+      "preparedTriangles": 37726,
+      "legacyProceduralTreeBatches": 51
+    },
+    {
+      "terrainVersion": 3,
+      "view": "ruin",
+      "x": -10.037339595146477,
+      "z": 280.0154867733363,
+      "quality": "medium",
+      "worldObjects": 4527,
+      "colliders": 193,
+      "camps": 4,
+      "ruins": 3,
+      "worldAndTerrainGenerationMs": 115.22,
+      "preparedUpdateMs": 0.78,
+      "trees": {
+        "instances": 104,
+        "draws": 7,
+        "triangles": 24468
+      },
+      "resources": {
+        "instances": 44,
+        "triangles": 5190,
+        "draws": 8
+      },
+      "environment": {
+        "instances": 109,
+        "triangles": 12116,
+        "draws": 21
+      },
+      "preparedBatches": 36,
+      "preparedTriangles": 41774,
+      "legacyProceduralTreeBatches": 51
+    },
+    {
+      "terrainVersion": 3,
+      "view": "ruin",
+      "x": -10.037339595146477,
+      "z": 280.0154867733363,
+      "quality": "high",
+      "worldObjects": 4527,
+      "colliders": 193,
+      "camps": 4,
+      "ruins": 3,
+      "worldAndTerrainGenerationMs": 115.22,
+      "preparedUpdateMs": 0.7,
+      "trees": {
+        "instances": 104,
+        "draws": 7,
+        "triangles": 24468
+      },
+      "resources": {
+        "instances": 44,
+        "triangles": 5190,
+        "draws": 8
+      },
+      "environment": {
+        "instances": 166,
+        "triangles": 18949,
+        "draws": 25
+      },
+      "preparedBatches": 40,
+      "preparedTriangles": 48607,
+      "legacyProceduralTreeBatches": 51
+    },
+    {
+      "terrainVersion": 4,
+      "view": "spawn",
+      "x": 0,
+      "z": 8,
+      "quality": "low",
+      "worldObjects": 5369,
+      "colliders": 197,
+      "camps": 4,
+      "ruins": 3,
+      "worldAndTerrainGenerationMs": 196.54,
+      "preparedUpdateMs": 2.02,
+      "trees": {
+        "instances": 309,
+        "draws": 7,
+        "triangles": 65472
+      },
+      "resources": {
+        "instances": 61,
+        "triangles": 5661,
+        "draws": 8
+      },
+      "environment": {
+        "instances": 81,
+        "triangles": 5308,
+        "draws": 25
+      },
+      "preparedBatches": 40,
+      "preparedTriangles": 76441,
+      "legacyProceduralTreeBatches": 72
+    },
+    {
+      "terrainVersion": 4,
+      "view": "spawn",
+      "x": 0,
+      "z": 8,
+      "quality": "medium",
+      "worldObjects": 5369,
+      "colliders": 197,
+      "camps": 4,
+      "ruins": 3,
+      "worldAndTerrainGenerationMs": 196.54,
+      "preparedUpdateMs": 0.71,
+      "trees": {
+        "instances": 309,
+        "draws": 7,
+        "triangles": 65472
+      },
+      "resources": {
+        "instances": 61,
+        "triangles": 5661,
+        "draws": 8
+      },
+      "environment": {
+        "instances": 143,
+        "triangles": 7480,
+        "draws": 26
+      },
+      "preparedBatches": 41,
+      "preparedTriangles": 78613,
+      "legacyProceduralTreeBatches": 72
+    },
+    {
+      "terrainVersion": 4,
+      "view": "spawn",
+      "x": 0,
+      "z": 8,
+      "quality": "high",
+      "worldObjects": 5369,
+      "colliders": 197,
+      "camps": 4,
+      "ruins": 3,
+      "worldAndTerrainGenerationMs": 196.54,
+      "preparedUpdateMs": 0.86,
+      "trees": {
+        "instances": 309,
+        "draws": 7,
+        "triangles": 65472
+      },
+      "resources": {
+        "instances": 61,
+        "triangles": 5661,
+        "draws": 8
+      },
+      "environment": {
+        "instances": 223,
+        "triangles": 10535,
+        "draws": 26
+      },
+      "preparedBatches": 41,
+      "preparedTriangles": 81668,
+      "legacyProceduralTreeBatches": 72
+    },
+    {
+      "terrainVersion": 4,
+      "view": "camp",
+      "x": 80.16466285218485,
+      "z": 68.13913094578311,
+      "quality": "low",
+      "worldObjects": 5369,
+      "colliders": 197,
+      "camps": 4,
+      "ruins": 3,
+      "worldAndTerrainGenerationMs": 196.54,
+      "preparedUpdateMs": 1.98,
+      "trees": {
+        "instances": 339,
+        "draws": 7,
+        "triangles": 70856
+      },
+      "resources": {
+        "instances": 57,
+        "triangles": 4682,
+        "draws": 8
+      },
+      "environment": {
+        "instances": 93,
+        "triangles": 6939,
+        "draws": 32
+      },
+      "preparedBatches": 47,
+      "preparedTriangles": 82477,
+      "legacyProceduralTreeBatches": 72
+    },
+    {
+      "terrainVersion": 4,
+      "view": "camp",
+      "x": 80.16466285218485,
+      "z": 68.13913094578311,
+      "quality": "medium",
+      "worldObjects": 5369,
+      "colliders": 197,
+      "camps": 4,
+      "ruins": 3,
+      "worldAndTerrainGenerationMs": 196.54,
+      "preparedUpdateMs": 0.46,
+      "trees": {
+        "instances": 339,
+        "draws": 7,
+        "triangles": 70856
+      },
+      "resources": {
+        "instances": 57,
+        "triangles": 4682,
+        "draws": 8
+      },
+      "environment": {
+        "instances": 172,
+        "triangles": 12907,
+        "draws": 37
+      },
+      "preparedBatches": 52,
+      "preparedTriangles": 88445,
+      "legacyProceduralTreeBatches": 72
+    },
+    {
+      "terrainVersion": 4,
+      "view": "camp",
+      "x": 80.16466285218485,
+      "z": 68.13913094578311,
+      "quality": "high",
+      "worldObjects": 5369,
+      "colliders": 197,
+      "camps": 4,
+      "ruins": 3,
+      "worldAndTerrainGenerationMs": 196.54,
+      "preparedUpdateMs": 0.5,
+      "trees": {
+        "instances": 339,
+        "draws": 7,
+        "triangles": 70856
+      },
+      "resources": {
+        "instances": 57,
+        "triangles": 4682,
+        "draws": 8
+      },
+      "environment": {
+        "instances": 241,
+        "triangles": 19303,
+        "draws": 37
+      },
+      "preparedBatches": 52,
+      "preparedTriangles": 94841,
+      "legacyProceduralTreeBatches": 72
+    },
+    {
+      "terrainVersion": 4,
+      "view": "ruin",
+      "x": 37.49064315925352,
+      "z": 295.5097544332966,
+      "quality": "low",
+      "worldObjects": 5369,
+      "colliders": 197,
+      "camps": 4,
+      "ruins": 3,
+      "worldAndTerrainGenerationMs": 196.54,
+      "preparedUpdateMs": 1.8,
+      "trees": {
+        "instances": 123,
+        "draws": 7,
+        "triangles": 26092
+      },
+      "resources": {
+        "instances": 47,
+        "triangles": 5664,
+        "draws": 9
+      },
+      "environment": {
+        "instances": 69,
+        "triangles": 7222,
+        "draws": 18
+      },
+      "preparedBatches": 34,
+      "preparedTriangles": 38978,
+      "legacyProceduralTreeBatches": 58
+    },
+    {
+      "terrainVersion": 4,
+      "view": "ruin",
+      "x": 37.49064315925352,
+      "z": 295.5097544332966,
+      "quality": "medium",
+      "worldObjects": 5369,
+      "colliders": 197,
+      "camps": 4,
+      "ruins": 3,
+      "worldAndTerrainGenerationMs": 196.54,
+      "preparedUpdateMs": 0.39,
+      "trees": {
+        "instances": 123,
+        "draws": 7,
+        "triangles": 26092
+      },
+      "resources": {
+        "instances": 47,
+        "triangles": 5664,
+        "draws": 9
+      },
+      "environment": {
+        "instances": 106,
+        "triangles": 11110,
+        "draws": 18
+      },
+      "preparedBatches": 34,
+      "preparedTriangles": 42866,
+      "legacyProceduralTreeBatches": 58
+    },
+    {
+      "terrainVersion": 4,
+      "view": "ruin",
+      "x": 37.49064315925352,
+      "z": 295.5097544332966,
+      "quality": "high",
+      "worldObjects": 5369,
+      "colliders": 197,
+      "camps": 4,
+      "ruins": 3,
+      "worldAndTerrainGenerationMs": 196.54,
+      "preparedUpdateMs": 0.64,
+      "trees": {
+        "instances": 123,
+        "draws": 7,
+        "triangles": 26092
+      },
+      "resources": {
+        "instances": 47,
+        "triangles": 5664,
+        "draws": 9
+      },
+      "environment": {
+        "instances": 152,
+        "triangles": 15792,
+        "draws": 23
+      },
+      "preparedBatches": 39,
+      "preparedTriangles": 47548,
+      "legacyProceduralTreeBatches": 58
+    }
+  ]
+}

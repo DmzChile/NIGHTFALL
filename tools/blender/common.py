@@ -95,6 +95,11 @@ def finish(name, height=None, crown=None):
     for v in o.data.vertices:
         v.co.x=(v.co.x-(low[0]+high[0])/2)*sx; v.co.y=(v.co.y-(low[1]+high[1])/2)*sy; v.co.z=(v.co.z-low[2])*sz
     for p in o.data.polygons: p.use_smooth=False
+    slots=list(o.data.materials); indices=[p.material_index for p in o.data.polygons]
+    used=sorted(set(indices)); remap={old:new for new,old in enumerate(used)}
+    o.data.materials.clear()
+    for index in used: o.data.materials.append(slots[index])
+    for p,index in zip(o.data.polygons,indices): p.material_index=remap[index]
     o.data.validate(verbose=True); o.data.update(); o.data.calc_loop_triangles()
     if any(p.area <= 1e-10 for p in o.data.polygons): raise ValueError('Degenerate face: '+name)
     return o

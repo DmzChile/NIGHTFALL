@@ -11,3 +11,4 @@ import './audit.test';
 import './lighting.test';
 import './sandbox.test';
 import './assets.test';
+import './asset-world.test';

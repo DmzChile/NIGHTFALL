@@ -14,6 +14,8 @@ import { addItem, capacity, count, craft, distance, height, normalizeSlots, make
 import { SaveManager, exportFile } from './storage';
 import { isCreative, type GameMode } from './model';
 import { executeGameCommand, type CommandResult } from './commands';
+import { EnvironmentWorld } from './world/EnvironmentWorld';
+import { buildingRadius } from './assets/AssetCollision';
 export type Target = {
     kind: 'node' | 'enemy' | 'building' | 'drop';
     id: string;
@@ -22,6 +24,8 @@ export type Target = {
 export class Engine {
     state: State;
     readonly terrain: TerrainManager;
+    readonly environment: EnvironmentWorld;
+    assetStats:()=>string[]=()=>['렌더러가 연결되면 GLB / 인스턴스 정보를 표시합니다.'];
     terrainDebugMode: TerrainDebugMode = 'off';
     storage: SaveManager;
     paused = true;
@@ -82,6 +86,7 @@ export class Engine {
         s.player.flying ??= false;
         this.state = s;
         this.terrain = getTerrain(s);
+        this.environment=new EnvironmentWorld(s);
         this.lastStamina = s.player.staminaAt ?? 0;
         this.storage = storage;
         this.panel = s.status === 'alive' ? 'pause' : 'death';
@@ -465,7 +470,7 @@ export class Engine {
         if (!this.canModify || ITEMS[it.id]?.kind !== 'building' || !this.state.player.items.some(i => i.uid === it.uid)) return;
         const s = this.state, p = s.player, x = p.x - Math.sin(p.yaw) * 3, z = p.z - Math.cos(p.yaw) * 3;
         if (this.creative && s.buildings.length >= 500) { this.notify('구조물은 한 월드에 최대 500개까지 배치할 수 있습니다.'); return; }
-        if (Math.hypot(x, z) > 465 || s.buildings.some(b => distance(b, { x, z }) < 2.2) || s.nodes.some(n => !n.depleted && (isTree(n) || n.kind === 'rock') && distance(n, { x, z }) < (isTree(n) ? nodeRadius(n) + 1.1 : 1.5))) {
+        if (Math.hypot(x, z) > 465 || this.environment.collidesAt(x,z,1.1) || s.buildings.some(b => distance(b, { x, z }) < 2.2) || s.nodes.some(n => !n.depleted && (isTree(n) || n.kind === 'rock') && distance(n, { x, z }) < (isTree(n) ? nodeRadius(n) + 1.1 : 1.5))) {
             this.notify('다른 물체와 겹쳐 배치할 수 없습니다.');
             return;
         }
@@ -864,7 +869,7 @@ export class Engine {
                     let placed = false;
                     for (let tries = 0; tries < 12; tries++) {
                         const a = random(s) * Math.PI * 2, r = 25 + random(s) * 20, x = p.x + Math.cos(a) * r, z = p.z + Math.sin(a) * r;
-                        if (Math.hypot(x, z) < 462 && isDryLand(x, z, s, .8) && ((s.terrainVersion !== 3 && s.terrainVersion !== 4) || this.terrain.isWalkable(x, z)) && !s.buildings.some(b => distance(b, { x, z }) < 6)) {
+                        if (Math.hypot(x, z) < 462 && !this.environment.collidesAt(x,z,.5) && isDryLand(x, z, s, .8) && ((s.terrainVersion !== 3 && s.terrainVersion !== 4) || this.terrain.isWalkable(x, z)) && !s.buildings.some(b => distance(b, { x, z }) < 6)) {
                             e.x = x;
                             e.z = z;
                             s.enemies.push(e);
@@ -891,9 +896,10 @@ export class Engine {
                 distance(center, { x, z }) < radius || (swept && distance(center, p) > radius && segmentSphere(
                     { x: p.x, y: 0, z: p.z }, { x, y: 0, z }, { x: center.x, y: 0, z: center.z }, radius) !== null);
             return Math.hypot(x, z) > 465
+                || this.environment.collidesAt(x,z,.35,p.x,p.z,swept)
                 || ((s.terrainVersion === 3 || s.terrainVersion === 4) && !this.terrain.canTraverse(p.x, p.z, x, z))
                 || s.nodes.some(n => !n.depleted && nodeRadius(n) > 0 && obstacle(n, nodeRadius(n) + .35))
-                || s.buildings.some(b => (['wall', 'chest', 'furnace', 'advanced_furnace', 'anvil'].includes(b.kind) || (swept && b.kind === 'door')) && obstacle(b, swept ? 1.2 : 1));
+                || s.buildings.some(b => {const radius=buildingRadius(b.kind,swept);if(!radius)return false;const before=distance(b,p),after=distance(b,{x,z});if(before<radius&&after>=before&&(x!==p.x||z!==p.z))return false;return obstacle(b,radius);});
         };
         let ix = (this.keys.has('KeyD') ? 1 : 0) - (this.keys.has('KeyA') ? 1 : 0), iz = (this.keys.has('KeyW') ? 1 : 0) - (this.keys.has('KeyS') ? 1 : 0);
         const norm = Math.hypot(ix, iz);
@@ -976,6 +982,12 @@ export class Engine {
             this.notify(`${region} 발견 · ${regionWarning(region)}`);
         }
     }
+    private moveAroundScenery(actor:Enemy,x:number,z:number) {
+        const valid=(nx:number,nz:number)=>!this.environment.collidesAt(nx,nz,.4,actor.x,actor.z)
+            && !this.state.buildings.some(b=>['wall','door'].includes(b.kind)&&distance(b,{x:nx,z:nz})<1.1)
+            && ((this.state.terrainVersion!==3&&this.state.terrainVersion!==4)||this.terrain.canTraverse(actor.x,actor.z,nx,nz));
+        if(valid(x,z)){actor.x=x;actor.z=z;}else if(valid(x,actor.z))actor.x=x;else if(valid(actor.x,z))actor.z=z;
+    }
     private stepFishing(dt: number) {
         const s = this.state, p = s.player, f = p.fishing;
         if (!f)
@@ -1020,7 +1032,7 @@ export class Engine {
             return;
         for (let tries = 0; tries < 12; tries++) {
             const a = random(s) * Math.PI * 2, r = 28 + random(s) * 12, x = p.x + Math.cos(a) * r, z = p.z + Math.sin(a) * r;
-            if (Math.hypot(x, z) > 462 || !isDryLand(x, z, s, .8) || biome(x, z) !== region || ((s.terrainVersion === 3 || s.terrainVersion === 4) && !this.terrain.isWalkable(x, z)) || s.buildings.some(b => distance(b, { x, z }) < 8))
+            if (Math.hypot(x, z) > 462 || this.environment.collidesAt(x,z,.5) || !isDryLand(x, z, s, .8) || biome(x, z) !== region || ((s.terrainVersion === 3 || s.terrainVersion === 4) && !this.terrain.isWalkable(x, z)) || s.buildings.some(b => distance(b, { x, z }) < 8))
                 continue;
             const choice = pool[Math.floor(random(s) * pool.length)], enemy = makeEnemy(s, choice.kind, choice.tier, x, z);
             enemy.region = region;
@@ -1087,7 +1099,7 @@ export class Engine {
                 const a = e.timer > 0 ? Math.atan2(e.z - p.z, e.x - p.x) : s.time * .12 + parseInt(e.id.slice(0, 2), 16);
                 const speed = e.timer > 0 ? d.speed * 1.8 : d.speed * .15;
                 const x = e.x + Math.cos(a) * speed * dt, z = e.z + Math.sin(a) * speed * dt;
-                if ((s.terrainVersion !== 3 && s.terrainVersion !== 4) || this.terrain.isWalkable(x, z)) { e.x = x; e.z = z; }
+                this.moveAroundScenery(e,x,z);
                 continue;
             }
             if (!updateAwareness(e, dist, dt) || dist > 130)
@@ -1125,10 +1137,7 @@ export class Engine {
                         if (wall.hp <= 0)
                             this.breakBuilding(wall);
                     }
-                    else if ((s.terrainVersion !== 3 && s.terrainVersion !== 4) || this.terrain.canTraverse(e.x, e.z, nx, nz)) {
-                        e.x = nx;
-                        e.z = nz;
-                    }
+                    else this.moveAroundScenery(e,nx,nz);
                 }
                 else {
                     e.state = 'windup';

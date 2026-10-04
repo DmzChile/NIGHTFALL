@@ -6,6 +6,8 @@ import type { TerrainManager } from './world/TerrainManager';
 import { isTree, TREE_SIZES, treeColor, treeYaw, type TreeTraits } from './woodland';
 import { loadTreeTemplate, treeModelGeometry, TREE_MODEL_URLS } from './tree-models';
 import type { TreeSpecies } from './woodland';
+import { treeAsset,AssetRegistry } from './assets/AssetRegistry';
+import { assetMaterial,type ModelCache } from './assets/ModelCache';
 
 /** Merge trunk, branches and foliage into one vertex-colored template per appearance. */
 export function treeGeometry(traits: TreeTraits, hard = false) {
@@ -50,7 +52,7 @@ export function treeGeometry(traits: TreeTraits, hard = false) {
 type Batch = { mesh: THREE.InstancedMesh; nodes: NodeState[]; capacity: number };
 export class TreeField {
     root = new THREE.Group();
-    material = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: .95, flatShading: true });
+    material = assetMaterial(true);
     geometries = new Map<string, THREE.BufferGeometry>();
     batches = new Map<string, Batch>();
     hits = new WeakMap<THREE.Object3D, Batch>();
@@ -68,6 +70,14 @@ export class TreeField {
     private templates = new Map<TreeSpecies, THREE.BufferGeometry>();
     private modelLoad: Promise<void> | null = null;
     private disposed = false;
+    private pack: ModelCache | null = null;
+    private unsubscribe: (()=>void) | null = null;
+    private tint = new THREE.Color();
+    loadAssetModels(cache: ModelCache) {
+        this.pack=cache;this.unsubscribe?.();this.unsubscribe=cache.subscribe(()=>this.invalidate());
+        const ids=[AssetRegistry.tree.smallA,AssetRegistry.tree.smallB,AssetRegistry.tree.mediumA,AssetRegistry.tree.mediumB,AssetRegistry.tree.largeA,AssetRegistry.tree.largeB,AssetRegistry.tree.worldA];
+        return Promise.allSettled(ids.map(id=>cache.load(id))).then(()=>undefined);
+    }
     /** Loading never blocks play. Procedural trees remain until each model is ready. */
     loadModels(loader = loadTreeTemplate) {
         if (this.disposed) return Promise.resolve();
@@ -94,6 +104,12 @@ export class TreeField {
         this.rotation.setFromEuler(this.euler.set(0, treeYaw(n), angle));
         batch.mesh.setMatrixAt(index, this.matrix.compose(this.position, this.rotation, this.scale));
         batch.mesh.instanceMatrix.needsUpdate = true;
+        const template=this.pack?.get(treeAsset(n.tree!));
+        this.tint.setRGB(1,1,1);
+        if(batch.mesh.name.startsWith('trees/pack/')&&template){
+            const c=template.foliageColor;this.tint.setHex(treeColor(n.tree!));this.tint.setRGB(this.tint.r/Math.max(.001,c.r),this.tint.g/Math.max(.001,c.g),this.tint.b/Math.max(.001,c.b));
+        }
+        batch.mesh.setColorAt(index,this.tint);batch.mesh.instanceColor!.needsUpdate=true;
     }
     update(s: State, x: number, z: number, time: number) {
         const terrain = getTerrain(s);
@@ -101,8 +117,8 @@ export class TreeField {
         const alive = s.nodes.reduce((signature, n, i) => isTree(n) && !n.depleted ? Math.imul(signature ^ (i + 1), 16777619) : signature, 2166136261);
         if (this.dirty || layout !== this.layout || s.nodes.length !== this.count || alive !== this.alive) {
             const groups = new Map<string, NodeState[]>(); this.instances.clear();
-            for (const n of s.nodes) if (isTree(n) && n.tree && !n.depleted && Math.hypot(n.x - x, n.z - z) < 150) {
-                const t = n.tree, key = `${n.kind}/${t.size}/${t.species}/${t.autumn}/${t.variant}`, group = groups.get(key) || [];
+            for (const n of s.nodes) if (isTree(n) && n.tree && !n.depleted && Math.hypot(n.x - x, n.z - z) < (n.tree.size==='world'?300:150)) {
+                const t=n.tree,asset=treeAsset(t),key=this.pack?.get(asset)?`pack/${asset}`:`${n.kind}/${t.size}/${t.species}/${t.autumn}/${t.variant}`,group=groups.get(key)||[];
                 group.push(n); groups.set(key, group);
             }
             for (const batch of this.batches.values()) { batch.mesh.count = 0; batch.nodes = []; }
@@ -110,7 +126,7 @@ export class TreeField {
                 let batch = this.batches.get(key);
                 if (!batch || batch.capacity < nodes.length) {
                     if (batch) { this.root.remove(batch.mesh); batch.mesh.dispose(); }
-                    let geometry = this.geometries.get(key);
+                    let geometry = key.startsWith('pack/')?this.pack!.get(treeAsset(nodes[0].tree!))!.geometry:this.geometries.get(key);
                     if (!geometry) {
                         const traits = nodes[0].tree!, template = this.templates.get(traits.species);
                         geometry = template ? treeModelGeometry(template, traits, nodes[0].kind === 'hardtree') : treeGeometry(traits, nodes[0].kind === 'hardtree');
@@ -143,7 +159,7 @@ export class TreeField {
         this.layout = ''; this.count = -1; this.dirty = true;
     }
     dispose() {
-        this.disposed = true; this.clear();
+        this.disposed = true;this.unsubscribe?.(); this.clear();
         for (const geometry of this.geometries.values()) geometry.dispose(); this.geometries.clear();
         for (const template of this.templates.values()) template.dispose(); this.templates.clear();
         this.material.dispose();

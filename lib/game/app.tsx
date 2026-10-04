@@ -290,6 +290,7 @@ function App() {
             {worlds.length > 0 && <div className="latest-world"><span className="section-label">최근 저장한 섬</span><WorldSummary world={worlds[0]} /><button className="btn primary wide" disabled={busy} onClick={() => load(worlds[0].id)}>이 섬 이어하기</button></div>}
             <div className="menu-actions"><button className={`btn wide ${worlds.length ? '' : 'primary'}`} disabled={busy} onClick={() => setMenu('new')}>새로운 섬 만들기</button><button className="btn wide" disabled={busy} onClick={() => { void list(); setMenu('worlds'); }}>저장된 월드 관리 <span>{worlds.length} / 5개</span></button><button className="btn wide" onClick={() => setMenu('help')}>조작법과 시작 안내</button></div>
             <div className="storage-note"><strong>이 브라우저에 진행이 저장됩니다.</strong><p>다른 기기에서 이어하려면 게임 메뉴의 파일 백업을 이용하세요.</p></div>
+            <a className="smallbutton" href="/assets" target="_blank" rel="noopener">오리지널 3D 에셋 갤러리 ↗</a>
         </> : menu === 'new' ? <>
             <h2>새로운 섬 만들기</h2><p className="muted">월드 이름과 플레이 방식을 정하세요.</p>
             <label>월드 이름<input value={name} onChange={ev => setName(ev.target.value)} maxLength={40}/></label>

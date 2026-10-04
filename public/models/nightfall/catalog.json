@@ -131,18 +131,18 @@
       "id": "tree_large_b",
       "category": "trees",
       "file": "/models/nightfall/trees/tree_large_b.glb",
-      "triangles": 148,
+      "triangles": 400,
       "materials": 2,
       "bounds": {
         "min": [
-          -3.8,
+          -3.74432,
           0.0,
-          -3.704726
+          -3.8
         ],
         "max": [
-          3.8,
+          3.74432,
           11.0,
-          3.704726
+          3.8
         ]
       },
       "source": "Blender 4.3.2"

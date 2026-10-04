@@ -16,6 +16,11 @@ import * as THREE from 'three';
 import { Engine } from './engine';
 import { biome, height, createWorld, selected, type State } from './model';
 import { NODES, MONSTERS } from './data';
+import { ModelCache } from './assets/ModelCache';
+import { ResourceField } from './assets/ResourceField';
+import { EnvironmentField } from './assets/EnvironmentField';
+import { EnvironmentWorld } from './world/EnvironmentWorld';
+import { buildingAsset } from './assets/AssetRegistry';
 export class GameScene {
     renderer: THREE.WebGLRenderer;
     scene = new THREE.Scene();
@@ -26,6 +31,11 @@ export class GameScene {
     quality: GraphicsQuality = readGraphicsQuality();
     waterSurface = new WaterSurface();
     trees = new TreeField();
+    models=new ModelCache();
+    resources=new ResourceField(this.models);
+    environmentField=new EnvironmentField(this.models);
+    private previewEnvironment:EnvironmentWorld;
+    private unsubscribeAssets:()=>void;
     sky = new SkyBackdrop();
     root = new THREE.Group();
     held = new THREE.Group();
@@ -67,6 +77,8 @@ export class GameScene {
     constructor(public host: HTMLDivElement, public onPause: () => void) {
         this.preview = createWorld('미리보기', 'nightfall');
         this.terrain = getTerrain(this.preview);
+        this.previewEnvironment=new EnvironmentWorld(this.preview);
+        this.unsubscribeAssets=this.models.subscribe(()=>this.lighting.invalidate());
         this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false, powerPreference: 'high-performance' });
         this.renderer.setPixelRatio(Math.min(devicePixelRatio, GRAPHICS[this.quality].pixelRatio));
         this.renderer.outputColorSpace = THREE.SRGBColorSpace;
@@ -75,8 +87,8 @@ export class GameScene {
         this.lighting.configure(this.renderer, this.quality);
         this.host.appendChild(this.renderer.domElement);
         this.scene.fog = new THREE.FogExp2(0xaac3bb, .0065);
-        this.scene.add(this.ambient, this.sun, this.sun.target, this.root, this.trees.root, this.camera);
-        void this.trees.loadModels().then(() => { if (!this.disposed) this.lighting.invalidate(); });
+        this.scene.add(this.ambient, this.sun, this.sun.target, this.root, this.trees.root,this.resources.root,this.environmentField.root, this.camera);
+        void this.trees.loadAssetModels(this.models).then(() => { if (!this.disposed) this.lighting.invalidate(); });
         this.sun.position.set(-30, 60, -20);
         this.ground = this.terrain.createMesh();
         this.scene.add(this.ground);
@@ -208,6 +220,7 @@ export class GameScene {
             const flame = this.mesh(g, 'cone', 0xeaaa5f, 0, .55, 0, .35, .9, .35);
             flame.material.emissive.setHex(0xff701e); flame.material.emissiveIntensity = 1.6;
             flame.castShadow = false; flame.receiveShadow = false;
+            flame.userData.keepEffect=true;g.userData.flame=flame;
             const light = new THREE.PointLight(0xffac55, 8, 12, 2);
             light.position.y = 1;
             g.add(light);
@@ -255,11 +268,20 @@ export class GameScene {
         }
         return g;
     }
+    private updateBuildingModel(g:THREE.Group,kind:string) {
+        const id=buildingAsset(kind);if(!id)return;const template=this.models.get(id);
+        if(!template){this.models.request(id);return;}if(g.userData.assetId===id)return;
+        for(const child of [...g.children])if(child instanceof THREE.Mesh&&!child.userData.keepEffect&&!child.userData.foundation)g.remove(child);
+        const mesh=new THREE.Mesh(template.geometry,this.models.material);mesh.castShadow=true;mesh.receiveShadow=true;mesh.userData.target=g.userData.target;
+        g.add(mesh);g.userData.assetId=id;this.lighting.invalidate();
+    }
     setEngine(engine: Engine | null) {
         this.lighting.invalidate();
         this.trees.clear();
+        this.resources.clear();this.environmentField.clear();
         this.clearSpawnMarkers();
         if (this.engine) {
+            this.engine.assetStats=()=>['렌더러 연결이 종료되었습니다.'];
             this.engine.onAttack = () => {
             };
             this.engine.onHit = () => {
@@ -288,6 +310,12 @@ export class GameScene {
                 this.flash = 1;
             };
             engine.onVisual = event => this.onVisual(event);
+            engine.assetStats=()=>{
+                const cache=this.models.stats(),r=this.resources.stats(),e=this.environmentField.stats(),trees=[...this.trees.batches.values()].filter(b=>b.mesh.count>0);
+                return [`GLB ${cache.loaded}개 로드 · 실패 ${cache.failed} · geometry ${(cache.geometryBytes/1048576).toFixed(2)} MiB · 텍스처 0`,
+                    `나무 ${trees.reduce((n,b)=>n+b.mesh.count,0)}개 / ${trees.length}묶음 · 자원 ${r.instances}개 / ${r.draws}묶음 · 장식 ${e.instances}개 / ${e.draws}묶음`,
+                    `최근 렌더 패스 ${this.renderer.info.render.calls} calls · ${this.renderer.info.render.triangles} triangles (그림자/카메라별 변동)`];
+            };
         }
     }
     onVisual(event: VisualEvent) {
@@ -479,12 +507,13 @@ export class GameScene {
             else
                 g.position.set(x, height(x, z, s), z);
             if (type === 'building') {
+                this.updateBuildingModel(g,kind);
                 const foundation = this.terrain.getFoundationAt(x, z);
                 g.position.y = foundation.height;
                 if ((s.terrainVersion === 3 || s.terrainVersion === 4) && !g.userData.foundation) {
                     const thickness = Math.max(.12, foundation.relief + .12);
                     const footing = this.mesh(g, 'box', 0x706551, 0, -thickness / 2, 0, 2.2, thickness, 2.2);
-                    footing.userData.target = { kind: type, id }; g.userData.foundation = true;
+                    footing.userData.target = { kind: type, id };footing.userData.foundation=true; g.userData.foundation = true;
                 }
             }
             g.userData.ready = true;
@@ -493,7 +522,7 @@ export class GameScene {
             return g;
         };
         for (const n of s.nodes)
-            if (!n.depleted && !isTree(n)) {
+            if (!n.depleted && !isTree(n)&&!this.resources.handles(n)) {
                 const g = put(n.id, n.kind, n.x, n.z, 'node');
                 if (g) {
                     const age = this.visualTime - (g.userData.shakeAt ?? -100), shake = Math.max(0, 1 - age / .22);
@@ -501,11 +530,13 @@ export class GameScene {
                 }
             }
         this.trees.update(s, view.x, view.z, this.visualTime);
+        this.resources.sync(s,view.x,view.z);
+        this.environmentField.sync(this.engine?.environment??this.previewEnvironment,view.x,view.z,this.quality);
         this.updateTerrainDebug(s);
         for (const b of s.buildings) {
             const g = put(b.id, b.kind, b.x, b.z, 'building', b.yaw);
             if (g && b.kind === 'campfire')
-                g.children[7]?.scale.setScalar(.9 + .15 * Math.sin(this.visualTime * 8));
+                (g.userData.flame as THREE.Mesh|undefined)?.scale.setScalar(.9 + .15 * Math.sin(this.visualTime * 8));
         }
         for (const e of s.enemies) {
             const g = put(e.id, e.kind, e.x, e.z, 'enemy');
@@ -553,11 +584,13 @@ export class GameScene {
             this.ray.far = 18;
             this.aimEnd.copy(this.ray.ray.direction).multiplyScalar(18).add(this.ray.ray.origin);
             const groundHit = (s.terrainVersion === 3 || s.terrainVersion === 4) ? this.terrain.segmentHit(this.ray.ray.origin, this.aimEnd) : null;
-            const hits = this.ray.intersectObjects([...this.root.children, this.trees.root], true);
+            this.resources.root.updateMatrixWorld(true);this.environmentField.root.updateMatrixWorld(true);
+            const hits = this.ray.intersectObjects([...this.root.children, this.trees.root,this.resources.root,this.environmentField.root], true);
             this.engine.target = null;
             for (const hit of hits) {
                 if (groundHit !== null && hit.distance >= groundHit * 18) break;
-                const target = this.trees.target(hit) || (hit.object.userData.target ? { ...hit.object.userData.target, distance: hit.distance } : null);
+                if(hit.object.userData.environmentOccluder)break;
+                const target = this.trees.target(hit)||this.resources.target(hit) || (hit.object.userData.target ? { ...hit.object.userData.target, distance: hit.distance } : null);
                 if (target) { this.engine.target = target; break; }
             }
             const it = selected(s);
@@ -636,6 +669,7 @@ export class GameScene {
         this.setEngine(null);
         this.effects.dispose();
         this.trees.dispose();
+        this.resources.dispose();this.environmentField.dispose();this.unsubscribeAssets();this.models.dispose();
         this.sky.dispose();
         this.lighting.dispose();
         this.renderer.dispose();

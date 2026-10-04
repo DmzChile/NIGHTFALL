@@ -22,13 +22,12 @@ for i,spec in enumerate(catalog['assets']):
 bpy.ops.mesh.primitive_plane_add(size=200,location=(0,-23,-.025));ground=bpy.context.object
 mat=bpy.data.materials.new('gallery_ground');mat.diffuse_color=(.06,.09,.065,1);ground.data.materials.append(mat)
 scene=bpy.context.scene;scene.render.engine='CYCLES';scene.cycles.device='CPU';scene.cycles.samples=16;scene.cycles.use_denoising=True
-scene.render.resolution_x=2400;scene.render.resolution_y=3000;scene.render.resolution_percentage=100
+scene.render.resolution_x=1800;scene.render.resolution_y=2250;scene.render.resolution_percentage=100
 scene.world.color=(.25,.25,.25)
 bpy.ops.object.light_add(type='AREA',location=(-15,-13,40));light=bpy.context.object;light.data.energy=26000;light.data.shape='DISK';light.data.size=28
 light.rotation_euler=(Vector((0,-23,0))-light.location).to_track_quat('-Z','Y').to_euler()
 bpy.ops.object.light_add(type='SUN',location=(0,0,10));bpy.context.object.data.energy=2;bpy.context.object.rotation_euler=(.35,-.4,-.6)
 bpy.ops.object.camera_add(location=(0,-56,68));cam=bpy.context.object;cam.data.type='ORTHO';cam.data.ortho_scale=55
 cam.rotation_euler=(Vector((0,-23,0))-cam.location).to_track_quat('-Z','Y').to_euler();scene.camera=cam
-scene.render.image_settings.file_format='PNG';scene.render.filepath=a.output or str(root/'gallery.png')
-bpy.ops.wm.save_as_mainfile(filepath=str(root/'gallery.blend'))
+scene.render.image_settings.file_format='JPEG';scene.render.image_settings.quality=90;scene.render.filepath=a.output or str(root/'gallery.jpg')
 bpy.ops.render.render(write_still=True)

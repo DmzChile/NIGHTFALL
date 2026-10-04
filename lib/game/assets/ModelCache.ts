@@ -21,7 +21,7 @@ export function extractAssetTemplate(scene:THREE.Object3D):AssetTemplate {
             const n=g.getAttribute('position').count,original=g.getAttribute('color'),colors=new Float32Array(n*3),foliage=new Float32Array(n),glow=new Float32Array(n);
             const materials=Array.isArray(o.material)?o.material:[o.material],groups=g.groups.length?g.groups:[{start:0,count:n,materialIndex:0}];
             for(const group of groups) {
-                const m=materials[group.materialIndex??0] as THREE.MeshStandardMaterial;
+                const m=materials[Array.isArray(o.material)?group.materialIndex??0:0] as THREE.MeshStandardMaterial;
                 if(Object.values(m).some(v=>v instanceof THREE.Texture))throw new Error('External textures are not allowed in the NIGHTFALL pack');
                 const color=m.color??new THREE.Color(0xffffff),leaves=/foliage/i.test(m.name);
                 const emission=m.emissive?Math.min(.4,(m.emissiveIntensity??1)*Math.max(m.emissive.r,m.emissive.g,m.emissive.b)/Math.max(.00001,color.r,color.g,color.b)):0;
@@ -56,9 +56,21 @@ export function assetMaterial(leafTint=false) {
 /** One parse per ID, including in-flight work; bounded startup downloads, borrowed geometry ownership. */
 export class ModelCache {
     readonly material=assetMaterial();readonly templates=new Map<AssetId,AssetTemplate>();readonly errors=new Map<AssetId,string>();
+    private fallbacks=new Map<AssetId,AssetTemplate>();
     private pending=new Map<AssetId,Promise<AssetTemplate>>();private listeners=new Set<()=>void>();private active=0;private queue:(()=>void)[]=[];private disposed=false;
     constructor(private loader:AssetLoader=async id=>(await new GLTFLoader().loadAsync(ASSETS.get(id)!.file)).scene) {}
     get(id:AssetId){return this.templates.get(id);}
+    /** Visible temporary geometry prevents invisible scenery colliders while GLBs load. */
+    fallback(id:AssetId) {
+        let ready=this.fallbacks.get(id);if(ready)return ready;
+        const bounds=ASSETS.get(id)!.bounds,w=bounds.max[0]-bounds.min[0],h=bounds.max[1]-bounds.min[1],d=bounds.max[2]-bounds.min[2];
+        const group=new THREE.Group(),material=new THREE.MeshStandardMaterial({color:/rock|stone|ruin/.test(id)?0x7b8279:/grass|bush|fern/.test(id)?0x667f48:0x79533a});
+        const box=(x:number,y:number,z:number,sx:number,sy:number,sz:number)=>{const m=new THREE.Mesh(new THREE.BoxGeometry(sx,sy,sz),material);m.position.set(x,y,z);group.add(m);};
+        if(id==='ruin_arch'){box(-w/2+.28,h/2,0,.56,h,d);box(w/2-.28,h/2,0,.56,h,d);box(0,h-.28,0,w,.56,d);}
+        else if(/dead_tree|torch_post|signpost/.test(id)){box(0,h/2,0,.35,h,.35);box(0,h*.7,0,w,.25,Math.min(d,.35));}
+        else box(0,h/2,0,w,h,d);
+        try{ready=extractAssetTemplate(group);}finally{disposeAssetSource(group);}this.fallbacks.set(id,ready);return ready;
+    }
     subscribe(f:()=>void){this.listeners.add(f);return()=>this.listeners.delete(f);}
     request(id:AssetId){if(!this.disposed&&ASSETS.has(id)&&!this.errors.has(id))void this.load(id).catch(()=>{});}
     load(id:AssetId):Promise<AssetTemplate> {
@@ -79,5 +91,5 @@ export class ModelCache {
         this.pending.set(id,promise);return promise;
     }
     stats(){let geometryBytes=0;for(const t of this.templates.values())for(const a of Object.values(t.geometry.attributes))geometryBytes+=a.array.byteLength;return{loaded:this.templates.size,failed:this.errors.size,geometryBytes,textureBytes:0};}
-    dispose(){this.disposed=true;this.listeners.clear();this.templates.forEach(t=>t.geometry.dispose());this.templates.clear();this.material.dispose();}
+    dispose(){this.disposed=true;this.listeners.clear();this.templates.forEach(t=>t.geometry.dispose());this.templates.clear();this.fallbacks.forEach(t=>t.geometry.dispose());this.fallbacks.clear();this.material.dispose();}
 }

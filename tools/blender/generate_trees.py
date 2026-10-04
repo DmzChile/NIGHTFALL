@@ -37,6 +37,14 @@ def generate(name):
             cylinder((.12*i,-.06*i,z),radius,h*.33,'foliage',7,0,rotation=(0,.03*i,.3*i))
         for i in range(3):
             a=i*2.1; bar((0,0,h*.35),(math.cos(a)*c*.6,math.sin(a)*c*.6,h*.46),r*.4)
+        if size=='large':
+            # Mature forked crown: side leaders and exposed roots change the silhouette/topology.
+            for i in range(3):
+                a=i*2.1+.4; x=math.cos(a)*c*.55; y=math.sin(a)*c*.55
+                bar((0,0,h*.3),(x,y,h*.69),r*.45,'wood',8,.35)
+                for j in range(2): cylinder((x,y,h*(.63+j*.13)),c*(.48-j*.13),h*.28,'foliage',7,0)
+            for i in range(4):
+                a=i*math.pi/2;bar((0,0,.55),(math.cos(a)*r*1.8,math.sin(a)*r*1.8,.07),r*.28)
     else:
         count={'small':2,'medium':4,'large':7}[size]
         for i in range(count):
