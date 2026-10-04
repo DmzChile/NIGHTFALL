@@ -1,0 +1,1551 @@
+{
+  "generator": "Blender 4.3.2",
+  "coordinate": "Y-up",
+  "pivot": "bottom center",
+  "palette": {
+    "wood": 7950650,
+    "wood_light": 12555360,
+    "wood_dark": 4668210,
+    "foliage": 6521921,
+    "foliage_dark": 3694403,
+    "grass": 9413725,
+    "stone": 8488830,
+    "stone_dark": 4147530,
+    "cloth": 12102784,
+    "iron": 7439242,
+    "coal": 2633779,
+    "copper": 12416325,
+    "gold": 13938007,
+    "silver": 12437443,
+    "crystal_glow": 7384250,
+    "mithril_glow": 9739197,
+    "obsidian": 4012110,
+    "sulfur": 11709024,
+    "mushroom": 11296846,
+    "mushroom_blue": 6391696,
+    "fire_glow": 13403730,
+    "symbol_glow": 11057284
+  },
+  "assets": [
+    {
+      "id": "tree_small_a",
+      "category": "trees",
+      "file": "/models/nightfall/trees/tree_small_a.glb",
+      "triangles": 116,
+      "materials": 2,
+      "bounds": {
+        "min": [
+          -1.2,
+          0.0,
+          -0.75058
+        ],
+        "max": [
+          1.2,
+          3.6,
+          0.75058
+        ]
+      },
+      "source": "Blender 4.3.2"
+    },
+    {
+      "id": "tree_small_b",
+      "category": "trees",
+      "file": "/models/nightfall/trees/tree_small_b.glb",
+      "triangles": 136,
+      "materials": 2,
+      "bounds": {
+        "min": [
+          -1.2,
+          0.0,
+          -1.169914
+        ],
+        "max": [
+          1.2,
+          3.6,
+          1.169914
+        ]
+      },
+      "source": "Blender 4.3.2"
+    },
+    {
+      "id": "tree_medium_a",
+      "category": "trees",
+      "file": "/models/nightfall/trees/tree_medium_a.glb",
+      "triangles": 204,
+      "materials": 2,
+      "bounds": {
+        "min": [
+          -2.2,
+          0.0,
+          -2.048927
+        ],
+        "max": [
+          2.2,
+          6.5,
+          2.048927
+        ]
+      },
+      "source": "Blender 4.3.2"
+    },
+    {
+      "id": "tree_medium_b",
+      "category": "trees",
+      "file": "/models/nightfall/trees/tree_medium_b.glb",
+      "triangles": 148,
+      "materials": 2,
+      "bounds": {
+        "min": [
+          -2.2,
+          0.0,
+          -2.144841
+        ],
+        "max": [
+          2.2,
+          6.5,
+          2.144841
+        ]
+      },
+      "source": "Blender 4.3.2"
+    },
+    {
+      "id": "tree_large_a",
+      "category": "trees",
+      "file": "/models/nightfall/trees/tree_large_a.glb",
+      "triangles": 456,
+      "materials": 2,
+      "bounds": {
+        "min": [
+          -3.8,
+          0.0,
+          -3.380147
+        ],
+        "max": [
+          3.8,
+          11.0,
+          3.380147
+        ]
+      },
+      "source": "Blender 4.3.2"
+    },
+    {
+      "id": "tree_large_b",
+      "category": "trees",
+      "file": "/models/nightfall/trees/tree_large_b.glb",
+      "triangles": 148,
+      "materials": 2,
+      "bounds": {
+        "min": [
+          -3.8,
+          0.0,
+          -3.704726
+        ],
+        "max": [
+          3.8,
+          11.0,
+          3.704726
+        ]
+      },
+      "source": "Blender 4.3.2"
+    },
+    {
+      "id": "tree_world_a",
+      "category": "trees",
+      "file": "/models/nightfall/trees/tree_world_a.glb",
+      "triangles": 524,
+      "materials": 2,
+      "bounds": {
+        "min": [
+          -9.0,
+          0.0,
+          -8.09645
+        ],
+        "max": [
+          9.0,
+          30.0,
+          8.09645
+        ]
+      },
+      "source": "Blender 4.3.2"
+    },
+    {
+      "id": "dead_tree_a",
+      "category": "trees",
+      "file": "/models/nightfall/trees/dead_tree_a.glb",
+      "triangles": 312,
+      "materials": 1,
+      "bounds": {
+        "min": [
+          -1.781996,
+          0.0,
+          -1.206235
+        ],
+        "max": [
+          1.781996,
+          4.418408,
+          1.206235
+        ]
+      },
+      "source": "Blender 4.3.2"
+    },
+    {
+      "id": "dead_tree_b",
+      "category": "trees",
+      "file": "/models/nightfall/trees/dead_tree_b.glb",
+      "triangles": 312,
+      "materials": 1,
+      "bounds": {
+        "min": [
+          -1.223606,
+          0.0,
+          -1.131325
+        ],
+        "max": [
+          1.223606,
+          5.245442,
+          1.131325
+        ]
+      },
+      "source": "Blender 4.3.2"
+    },
+    {
+      "id": "tree_stump_small",
+      "category": "trees",
+      "file": "/models/nightfall/trees/tree_stump_small.glb",
+      "triangles": 136,
+      "materials": 2,
+      "bounds": {
+        "min": [
+          -0.276789,
+          0.0,
+          -0.307954
+        ],
+        "max": [
+          0.276789,
+          0.1863,
+          0.307954
+        ]
+      },
+      "source": "Blender 4.3.2"
+    },
+    {
+      "id": "tree_stump_medium",
+      "category": "trees",
+      "file": "/models/nightfall/trees/tree_stump_medium.glb",
+      "triangles": 136,
+      "materials": 2,
+      "bounds": {
+        "min": [
+          -0.50045,
+          0.0,
+          -0.559836
+        ],
+        "max": [
+          0.50045,
+          0.35392,
+          0.559836
+        ]
+      },
+      "source": "Blender 4.3.2"
+    },
+    {
+      "id": "tree_stump_large",
+      "category": "trees",
+      "file": "/models/nightfall/trees/tree_stump_large.glb",
+      "triangles": 136,
+      "materials": 2,
+      "bounds": {
+        "min": [
+          -0.873179,
+          0.0,
+          -0.980719
+        ],
+        "max": [
+          0.873179,
+          0.654489,
+          0.980719
+        ]
+      },
+      "source": "Blender 4.3.2"
+    },
+    {
+      "id": "rock_small_a",
+      "category": "rocks",
+      "file": "/models/nightfall/rocks/rock_small_a.glb",
+      "triangles": 34,
+      "materials": 1,
+      "bounds": {
+        "min": [
+          -0.529854,
+          0.0,
+          -0.342929
+        ],
+        "max": [
+          0.529854,
+          0.4,
+          0.342929
+        ]
+      },
+      "source": "Blender 4.3.2"
+    },
+    {
+      "id": "rock_small_b",
+      "category": "rocks",
+      "file": "/models/nightfall/rocks/rock_small_b.glb",
+      "triangles": 40,
+      "materials": 1,
+      "bounds": {
+        "min": [
+          -0.338285,
+          0.0,
+          -0.446352
+        ],
+        "max": [
+          0.338285,
+          0.7,
+          0.446352
+        ]
+      },
+      "source": "Blender 4.3.2"
+    },
+    {
+      "id": "rock_medium_a",
+      "category": "rocks",
+      "file": "/models/nightfall/rocks/rock_medium_a.glb",
+      "triangles": 46,
+      "materials": 1,
+      "bounds": {
+        "min": [
+          -0.979962,
+          0.0,
+          -0.742391
+        ],
+        "max": [
+          0.979962,
+          1.2,
+          0.742391
+        ]
+      },
+      "source": "Blender 4.3.2"
+    },
+    {
+      "id": "rock_medium_b",
+      "category": "rocks",
+      "file": "/models/nightfall/rocks/rock_medium_b.glb",
+      "triangles": 80,
+      "materials": 1,
+      "bounds": {
+        "min": [
+          -1.283186,
+          0.0,
+          -0.696233
+        ],
+        "max": [
+          1.283186,
+          0.85,
+          0.696233
+        ]
+      },
+      "source": "Blender 4.3.2"
+    },
+    {
+      "id": "rock_medium_c",
+      "category": "rocks",
+      "file": "/models/nightfall/rocks/rock_medium_c.glb",
+      "triangles": 40,
+      "materials": 1,
+      "bounds": {
+        "min": [
+          -0.664625,
+          0.0,
+          -0.690141
+        ],
+        "max": [
+          0.664625,
+          1.75,
+          0.690141
+        ]
+      },
+      "source": "Blender 4.3.2"
+    },
+    {
+      "id": "rock_large_a",
+      "category": "rocks",
+      "file": "/models/nightfall/rocks/rock_large_a.glb",
+      "triangles": 86,
+      "materials": 1,
+      "bounds": {
+        "min": [
+          -1.96303,
+          0.0,
+          -1.467139
+        ],
+        "max": [
+          1.96303,
+          2.6,
+          1.467139
+        ]
+      },
+      "source": "Blender 4.3.2"
+    },
+    {
+      "id": "rock_large_b",
+      "category": "rocks",
+      "file": "/models/nightfall/rocks/rock_large_b.glb",
+      "triangles": 34,
+      "materials": 1,
+      "bounds": {
+        "min": [
+          -1.419199,
+          0.0,
+          -0.947776
+        ],
+        "max": [
+          1.419199,
+          3.1,
+          0.947776
+        ]
+      },
+      "source": "Blender 4.3.2"
+    },
+    {
+      "id": "rock_cliff_a",
+      "category": "rocks",
+      "file": "/models/nightfall/rocks/rock_cliff_a.glb",
+      "triangles": 74,
+      "materials": 1,
+      "bounds": {
+        "min": [
+          -2.162924,
+          0.0,
+          -0.911934
+        ],
+        "max": [
+          2.162924,
+          4.2,
+          0.911934
+        ]
+      },
+      "source": "Blender 4.3.2"
+    },
+    {
+      "id": "stone_node",
+      "category": "ores",
+      "file": "/models/nightfall/ores/stone_node.glb",
+      "triangles": 40,
+      "materials": 1,
+      "bounds": {
+        "min": [
+          -0.854634,
+          0.0,
+          -0.590076
+        ],
+        "max": [
+          0.854634,
+          1.25,
+          0.590076
+        ]
+      },
+      "source": "Blender 4.3.2"
+    },
+    {
+      "id": "coal_node",
+      "category": "ores",
+      "file": "/models/nightfall/ores/coal_node.glb",
+      "triangles": 234,
+      "materials": 2,
+      "bounds": {
+        "min": [
+          -0.808816,
+          0.0,
+          -0.647521
+        ],
+        "max": [
+          0.808816,
+          1.25,
+          0.647521
+        ]
+      },
+      "source": "Blender 4.3.2"
+    },
+    {
+      "id": "copper_node",
+      "category": "ores",
+      "file": "/models/nightfall/ores/copper_node.glb",
+      "triangles": 234,
+      "materials": 2,
+      "bounds": {
+        "min": [
+          -0.901436,
+          0.0,
+          -0.624254
+        ],
+        "max": [
+          0.901436,
+          1.25,
+          0.624254
+        ]
+      },
+      "source": "Blender 4.3.2"
+    },
+    {
+      "id": "iron_node",
+      "category": "ores",
+      "file": "/models/nightfall/ores/iron_node.glb",
+      "triangles": 234,
+      "materials": 2,
+      "bounds": {
+        "min": [
+          -0.786354,
+          0.0,
+          -0.651688
+        ],
+        "max": [
+          0.786354,
+          1.25,
+          0.651688
+        ]
+      },
+      "source": "Blender 4.3.2"
+    },
+    {
+      "id": "gold_node",
+      "category": "ores",
+      "file": "/models/nightfall/ores/gold_node.glb",
+      "triangles": 234,
+      "materials": 2,
+      "bounds": {
+        "min": [
+          -0.784879,
+          0.0,
+          -0.677813
+        ],
+        "max": [
+          0.784879,
+          1.25,
+          0.677813
+        ]
+      },
+      "source": "Blender 4.3.2"
+    },
+    {
+      "id": "rare_crystal_node",
+      "category": "ores",
+      "file": "/models/nightfall/ores/rare_crystal_node.glb",
+      "triangles": 104,
+      "materials": 2,
+      "bounds": {
+        "min": [
+          -0.763241,
+          0.0,
+          -0.604539
+        ],
+        "max": [
+          0.763241,
+          1.45122,
+          0.604539
+        ]
+      },
+      "source": "Blender 4.3.2"
+    },
+    {
+      "id": "silver_node",
+      "category": "ores",
+      "file": "/models/nightfall/ores/silver_node.glb",
+      "triangles": 234,
+      "materials": 2,
+      "bounds": {
+        "min": [
+          -0.83543,
+          0.0,
+          -0.667487
+        ],
+        "max": [
+          0.83543,
+          1.25,
+          0.667487
+        ]
+      },
+      "source": "Blender 4.3.2"
+    },
+    {
+      "id": "mithril_node",
+      "category": "ores",
+      "file": "/models/nightfall/ores/mithril_node.glb",
+      "triangles": 104,
+      "materials": 2,
+      "bounds": {
+        "min": [
+          -0.86809,
+          0.0,
+          -0.62314
+        ],
+        "max": [
+          0.86809,
+          1.451062,
+          0.62314
+        ]
+      },
+      "source": "Blender 4.3.2"
+    },
+    {
+      "id": "obsidian_node",
+      "category": "ores",
+      "file": "/models/nightfall/ores/obsidian_node.glb",
+      "triangles": 234,
+      "materials": 2,
+      "bounds": {
+        "min": [
+          -0.947444,
+          0.0,
+          -0.639701
+        ],
+        "max": [
+          0.947444,
+          1.25,
+          0.639701
+        ]
+      },
+      "source": "Blender 4.3.2"
+    },
+    {
+      "id": "sulfur_node",
+      "category": "ores",
+      "file": "/models/nightfall/ores/sulfur_node.glb",
+      "triangles": 234,
+      "materials": 2,
+      "bounds": {
+        "min": [
+          -0.880937,
+          0.0,
+          -0.633828
+        ],
+        "max": [
+          0.880937,
+          1.25,
+          0.633828
+        ]
+      },
+      "source": "Blender 4.3.2"
+    },
+    {
+      "id": "grass_tuft_a",
+      "category": "ground",
+      "file": "/models/nightfall/ground/grass_tuft_a.glb",
+      "triangles": 15,
+      "materials": 1,
+      "bounds": {
+        "min": [
+          -0.28778,
+          0.0,
+          -0.259526
+        ],
+        "max": [
+          0.28778,
+          0.48,
+          0.259526
+        ]
+      },
+      "source": "Blender 4.3.2"
+    },
+    {
+      "id": "grass_tuft_b",
+      "category": "ground",
+      "file": "/models/nightfall/ground/grass_tuft_b.glb",
+      "triangles": 21,
+      "materials": 1,
+      "bounds": {
+        "min": [
+          -0.28778,
+          0.0,
+          -0.284464
+        ],
+        "max": [
+          0.28778,
+          0.57,
+          0.284464
+        ]
+      },
+      "source": "Blender 4.3.2"
+    },
+    {
+      "id": "grass_tuft_c",
+      "category": "ground",
+      "file": "/models/nightfall/ground/grass_tuft_c.glb",
+      "triangles": 27,
+      "materials": 1,
+      "bounds": {
+        "min": [
+          -0.28778,
+          0.0,
+          -0.284464
+        ],
+        "max": [
+          0.28778,
+          0.66,
+          0.284464
+        ]
+      },
+      "source": "Blender 4.3.2"
+    },
+    {
+      "id": "bush_a",
+      "category": "ground",
+      "file": "/models/nightfall/ground/bush_a.glb",
+      "triangles": 84,
+      "materials": 2,
+      "bounds": {
+        "min": [
+          -0.641779,
+          0.0,
+          -0.545667
+        ],
+        "max": [
+          0.641779,
+          1.031434,
+          0.545667
+        ]
+      },
+      "source": "Blender 4.3.2"
+    },
+    {
+      "id": "bush_b",
+      "category": "ground",
+      "file": "/models/nightfall/ground/bush_b.glb",
+      "triangles": 124,
+      "materials": 2,
+      "bounds": {
+        "min": [
+          -0.674617,
+          0.0,
+          -0.576304
+        ],
+        "max": [
+          0.674617,
+          1.031434,
+          0.576304
+        ]
+      },
+      "source": "Blender 4.3.2"
+    },
+    {
+      "id": "fern_a",
+      "category": "ground",
+      "file": "/models/nightfall/ground/fern_a.glb",
+      "triangles": 140,
+      "materials": 1,
+      "bounds": {
+        "min": [
+          -0.622184,
+          0.0,
+          -0.637485
+        ],
+        "max": [
+          0.622184,
+          0.338369,
+          0.637485
+        ]
+      },
+      "source": "Blender 4.3.2"
+    },
+    {
+      "id": "mushroom_a",
+      "category": "ground",
+      "file": "/models/nightfall/ground/mushroom_a.glb",
+      "triangles": 44,
+      "materials": 2,
+      "bounds": {
+        "min": [
+          -0.224233,
+          0.0,
+          -0.218611
+        ],
+        "max": [
+          0.224233,
+          0.365,
+          0.218611
+        ]
+      },
+      "source": "Blender 4.3.2"
+    },
+    {
+      "id": "mushroom_b",
+      "category": "ground",
+      "file": "/models/nightfall/ground/mushroom_b.glb",
+      "triangles": 132,
+      "materials": 2,
+      "bounds": {
+        "min": [
+          -0.474233,
+          0.0,
+          -0.218611
+        ],
+        "max": [
+          0.474233,
+          0.485,
+          0.218611
+        ]
+      },
+      "source": "Blender 4.3.2"
+    },
+    {
+      "id": "fallen_branch_a",
+      "category": "ground",
+      "file": "/models/nightfall/ground/fallen_branch_a.glb",
+      "triangles": 96,
+      "materials": 1,
+      "bounds": {
+        "min": [
+          -1.00434,
+          0.0,
+          -0.412122
+        ],
+        "max": [
+          1.00434,
+          0.290653,
+          0.412122
+        ]
+      },
+      "source": "Blender 4.3.2"
+    },
+    {
+      "id": "fallen_log_a",
+      "category": "ground",
+      "file": "/models/nightfall/ground/fallen_log_a.glb",
+      "triangles": 156,
+      "materials": 3,
+      "bounds": {
+        "min": [
+          -0.9605,
+          0.0,
+          -0.333745
+        ],
+        "max": [
+          0.9605,
+          0.51153,
+          0.333745
+        ]
+      },
+      "source": "Blender 4.3.2"
+    },
+    {
+      "id": "small_stones_a",
+      "category": "ground",
+      "file": "/models/nightfall/ground/small_stones_a.glb",
+      "triangles": 120,
+      "materials": 1,
+      "bounds": {
+        "min": [
+          -0.466589,
+          0.0,
+          -0.381162
+        ],
+        "max": [
+          0.466589,
+          0.16,
+          0.381162
+        ]
+      },
+      "source": "Blender 4.3.2"
+    },
+    {
+      "id": "small_stones_b",
+      "category": "ground",
+      "file": "/models/nightfall/ground/small_stones_b.glb",
+      "triangles": 194,
+      "materials": 1,
+      "bounds": {
+        "min": [
+          -0.466589,
+          0.0,
+          -0.427991
+        ],
+        "max": [
+          0.466589,
+          0.2,
+          0.427991
+        ]
+      },
+      "source": "Blender 4.3.2"
+    },
+    {
+      "id": "fallen_log_small",
+      "category": "ground",
+      "file": "/models/nightfall/ground/fallen_log_small.glb",
+      "triangles": 144,
+      "materials": 2,
+      "bounds": {
+        "min": [
+          -0.9605,
+          0.0,
+          -0.333745
+        ],
+        "max": [
+          0.9605,
+          0.51153,
+          0.333745
+        ]
+      },
+      "source": "Blender 4.3.2"
+    },
+    {
+      "id": "fallen_log_large",
+      "category": "ground",
+      "file": "/models/nightfall/ground/fallen_log_large.glb",
+      "triangles": 156,
+      "materials": 3,
+      "bounds": {
+        "min": [
+          -1.7105,
+          0.0,
+          -0.421513
+        ],
+        "max": [
+          1.7105,
+          0.808923,
+          0.421513
+        ]
+      },
+      "source": "Blender 4.3.2"
+    },
+    {
+      "id": "workbench",
+      "category": "crafting",
+      "file": "/models/nightfall/crafting/workbench.glb",
+      "triangles": 228,
+      "materials": 4,
+      "bounds": {
+        "min": [
+          -0.825,
+          0.0,
+          -0.4925
+        ],
+        "max": [
+          0.825,
+          1.23,
+          0.4925
+        ]
+      },
+      "source": "Blender 4.3.2"
+    },
+    {
+      "id": "campfire",
+      "category": "crafting",
+      "file": "/models/nightfall/crafting/campfire.glb",
+      "triangles": 432,
+      "materials": 2,
+      "bounds": {
+        "min": [
+          -0.871059,
+          0.0,
+          -0.81886
+        ],
+        "max": [
+          0.871059,
+          0.3,
+          0.81886
+        ]
+      },
+      "source": "Blender 4.3.2"
+    },
+    {
+      "id": "furnace",
+      "category": "crafting",
+      "file": "/models/nightfall/crafting/furnace.glb",
+      "triangles": 148,
+      "materials": 3,
+      "bounds": {
+        "min": [
+          -0.755,
+          0.0,
+          -0.65
+        ],
+        "max": [
+          0.755,
+          2.155,
+          0.65
+        ]
+      },
+      "source": "Blender 4.3.2"
+    },
+    {
+      "id": "anvil",
+      "category": "crafting",
+      "file": "/models/nightfall/crafting/anvil.glb",
+      "triangles": 52,
+      "materials": 2,
+      "bounds": {
+        "min": [
+          -0.775,
+          0.0,
+          -0.3
+        ],
+        "max": [
+          0.775,
+          0.98,
+          0.3
+        ]
+      },
+      "source": "Blender 4.3.2"
+    },
+    {
+      "id": "storage_chest",
+      "category": "crafting",
+      "file": "/models/nightfall/crafting/storage_chest.glb",
+      "triangles": 132,
+      "materials": 3,
+      "bounds": {
+        "min": [
+          -0.65,
+          0.0,
+          -0.4575
+        ],
+        "max": [
+          0.65,
+          0.825,
+          0.4575
+        ]
+      },
+      "source": "Blender 4.3.2"
+    },
+    {
+      "id": "wood_crate",
+      "category": "props",
+      "file": "/models/nightfall/props/wood_crate.glb",
+      "triangles": 84,
+      "materials": 2,
+      "bounds": {
+        "min": [
+          -0.41,
+          0.0,
+          -0.505
+        ],
+        "max": [
+          0.41,
+          0.84,
+          0.505
+        ]
+      },
+      "source": "Blender 4.3.2"
+    },
+    {
+      "id": "barrel",
+      "category": "props",
+      "file": "/models/nightfall/props/barrel.glb",
+      "triangles": 204,
+      "materials": 3,
+      "bounds": {
+        "min": [
+          -0.420367,
+          0.0,
+          -0.442
+        ],
+        "max": [
+          0.420367,
+          0.9425,
+          0.442
+        ]
+      },
+      "source": "Blender 4.3.2"
+    },
+    {
+      "id": "sack",
+      "category": "props",
+      "file": "/models/nightfall/props/sack.glb",
+      "triangles": 68,
+      "materials": 2,
+      "bounds": {
+        "min": [
+          -0.394552,
+          0.0,
+          -0.319731
+        ],
+        "max": [
+          0.394552,
+          0.950224,
+          0.319731
+        ]
+      },
+      "source": "Blender 4.3.2"
+    },
+    {
+      "id": "wood_cart",
+      "category": "props",
+      "file": "/models/nightfall/props/wood_cart.glb",
+      "triangles": 260,
+      "materials": 3,
+      "bounds": {
+        "min": [
+          -0.7675,
+          0.0,
+          -1.415936
+        ],
+        "max": [
+          0.7675,
+          0.880423,
+          1.415936
+        ]
+      },
+      "source": "Blender 4.3.2"
+    },
+    {
+      "id": "wood_fence",
+      "category": "props",
+      "file": "/models/nightfall/props/wood_fence.glb",
+      "triangles": 48,
+      "materials": 2,
+      "bounds": {
+        "min": [
+          -1.0,
+          0.0,
+          -0.09
+        ],
+        "max": [
+          1.0,
+          1.2,
+          0.09
+        ]
+      },
+      "source": "Blender 4.3.2"
+    },
+    {
+      "id": "broken_fence",
+      "category": "props",
+      "file": "/models/nightfall/props/broken_fence.glb",
+      "triangles": 48,
+      "materials": 2,
+      "bounds": {
+        "min": [
+          -0.94,
+          0.0,
+          -0.09
+        ],
+        "max": [
+          0.94,
+          1.2,
+          0.09
+        ]
+      },
+      "source": "Blender 4.3.2"
+    },
+    {
+      "id": "signpost",
+      "category": "props",
+      "file": "/models/nightfall/props/signpost.glb",
+      "triangles": 36,
+      "materials": 3,
+      "bounds": {
+        "min": [
+          -0.513463,
+          0.0,
+          -0.09
+        ],
+        "max": [
+          0.513463,
+          1.544457,
+          0.09
+        ]
+      },
+      "source": "Blender 4.3.2"
+    },
+    {
+      "id": "torch_post",
+      "category": "props",
+      "file": "/models/nightfall/props/torch_post.glb",
+      "triangles": 56,
+      "materials": 3,
+      "bounds": {
+        "min": [
+          -0.214484,
+          0.0,
+          -0.209107
+        ],
+        "max": [
+          0.214484,
+          2.19,
+          0.209107
+        ]
+      },
+      "source": "Blender 4.3.2"
+    },
+    {
+      "id": "tent",
+      "category": "props",
+      "file": "/models/nightfall/props/tent.glb",
+      "triangles": 149,
+      "materials": 3,
+      "bounds": {
+        "min": [
+          -1.4093,
+          0.0,
+          -1.35651
+        ],
+        "max": [
+          1.4093,
+          1.884065,
+          1.35651
+        ]
+      },
+      "source": "Blender 4.3.2"
+    },
+    {
+      "id": "broken_cart",
+      "category": "props",
+      "file": "/models/nightfall/props/broken_cart.glb",
+      "triangles": 184,
+      "materials": 3,
+      "bounds": {
+        "min": [
+          -0.775913,
+          0.0,
+          -1.415936
+        ],
+        "max": [
+          0.775913,
+          0.880423,
+          1.415936
+        ]
+      },
+      "source": "Blender 4.3.2"
+    },
+    {
+      "id": "totem",
+      "category": "props",
+      "file": "/models/nightfall/props/totem.glb",
+      "triangles": 108,
+      "materials": 3,
+      "bounds": {
+        "min": [
+          -0.877435,
+          0.0,
+          -0.855436
+        ],
+        "max": [
+          0.877435,
+          3.375,
+          0.855436
+        ]
+      },
+      "source": "Blender 4.3.2"
+    },
+    {
+      "id": "ruin_wall",
+      "category": "ruins",
+      "file": "/models/nightfall/ruins/ruin_wall.glb",
+      "triangles": 144,
+      "materials": 1,
+      "bounds": {
+        "min": [
+          -0.981813,
+          0.0,
+          -0.22
+        ],
+        "max": [
+          0.981813,
+          1.830235,
+          0.22
+        ]
+      },
+      "source": "Blender 4.3.2"
+    },
+    {
+      "id": "ruin_wall_broken",
+      "category": "ruins",
+      "file": "/models/nightfall/ruins/ruin_wall_broken.glb",
+      "triangles": 228,
+      "materials": 1,
+      "bounds": {
+        "min": [
+          -1.121896,
+          0.0,
+          -0.416489
+        ],
+        "max": [
+          1.121896,
+          1.837118,
+          0.416489
+        ]
+      },
+      "source": "Blender 4.3.2"
+    },
+    {
+      "id": "ruin_corner",
+      "category": "ruins",
+      "file": "/models/nightfall/ruins/ruin_corner.glb",
+      "triangles": 240,
+      "materials": 1,
+      "bounds": {
+        "min": [
+          -0.990241,
+          0.0,
+          -0.8425
+        ],
+        "max": [
+          0.990241,
+          1.830235,
+          0.8425
+        ]
+      },
+      "source": "Blender 4.3.2"
+    },
+    {
+      "id": "ruin_column",
+      "category": "ruins",
+      "file": "/models/nightfall/ruins/ruin_column.glb",
+      "triangles": 88,
+      "materials": 2,
+      "bounds": {
+        "min": [
+          -0.476314,
+          0.0,
+          -0.55
+        ],
+        "max": [
+          0.476314,
+          2.525,
+          0.55
+        ]
+      },
+      "source": "Blender 4.3.2"
+    },
+    {
+      "id": "ruin_arch",
+      "category": "ruins",
+      "file": "/models/nightfall/ruins/ruin_arch.glb",
+      "triangles": 180,
+      "materials": 1,
+      "bounds": {
+        "min": [
+          -1.398915,
+          0.0,
+          -0.29
+        ],
+        "max": [
+          1.398915,
+          3.132965,
+          0.29
+        ]
+      },
+      "source": "Blender 4.3.2"
+    },
+    {
+      "id": "ruin_floor",
+      "category": "ruins",
+      "file": "/models/nightfall/ruins/ruin_floor.glb",
+      "triangles": 82,
+      "materials": 2,
+      "bounds": {
+        "min": [
+          -0.98,
+          0.0,
+          -0.98
+        ],
+        "max": [
+          0.98,
+          0.29,
+          0.98
+        ]
+      },
+      "source": "Blender 4.3.2"
+    },
+    {
+      "id": "wood_wall",
+      "category": "building",
+      "file": "/models/nightfall/building/wood_wall.glb",
+      "triangles": 120,
+      "materials": 2,
+      "bounds": {
+        "min": [
+          -1.0,
+          0.0,
+          -0.1
+        ],
+        "max": [
+          1.0,
+          2.4,
+          0.1
+        ]
+      },
+      "source": "Blender 4.3.2"
+    },
+    {
+      "id": "wood_wall_window",
+      "category": "building",
+      "file": "/models/nightfall/building/wood_wall_window.glb",
+      "triangles": 156,
+      "materials": 2,
+      "bounds": {
+        "min": [
+          -1.0,
+          0.0,
+          -0.1
+        ],
+        "max": [
+          1.0,
+          2.4,
+          0.1
+        ]
+      },
+      "source": "Blender 4.3.2"
+    },
+    {
+      "id": "wood_wall_door",
+      "category": "building",
+      "file": "/models/nightfall/building/wood_wall_door.glb",
+      "triangles": 204,
+      "materials": 2,
+      "bounds": {
+        "min": [
+          -1.0,
+          0.0,
+          -0.1
+        ],
+        "max": [
+          1.0,
+          2.4,
+          0.1
+        ]
+      },
+      "source": "Blender 4.3.2"
+    },
+    {
+      "id": "wood_floor",
+      "category": "building",
+      "file": "/models/nightfall/building/wood_floor.glb",
+      "triangles": 96,
+      "materials": 1,
+      "bounds": {
+        "min": [
+          -0.9925,
+          0.0,
+          -1.0
+        ],
+        "max": [
+          0.9925,
+          0.16,
+          1.0
+        ]
+      },
+      "source": "Blender 4.3.2"
+    },
+    {
+      "id": "wood_roof",
+      "category": "building",
+      "file": "/models/nightfall/building/wood_roof.glb",
+      "triangles": 96,
+      "materials": 1,
+      "bounds": {
+        "min": [
+          -0.9925,
+          0.0,
+          -0.949065
+        ],
+        "max": [
+          0.9925,
+          0.843994,
+          0.949065
+        ]
+      },
+      "source": "Blender 4.3.2"
+    },
+    {
+      "id": "wood_roof_corner",
+      "category": "building",
+      "file": "/models/nightfall/building/wood_roof_corner.glb",
+      "triangles": 84,
+      "materials": 2,
+      "bounds": {
+        "min": [
+          -1.0,
+          0.0,
+          -0.95092
+        ],
+        "max": [
+          1.0,
+          0.868712,
+          0.95092
+        ]
+      },
+      "source": "Blender 4.3.2"
+    },
+    {
+      "id": "wood_beam",
+      "category": "building",
+      "file": "/models/nightfall/building/wood_beam.glb",
+      "triangles": 12,
+      "materials": 1,
+      "bounds": {
+        "min": [
+          -1.0,
+          0.0,
+          -0.12
+        ],
+        "max": [
+          1.0,
+          0.24,
+          0.12
+        ]
+      },
+      "source": "Blender 4.3.2"
+    },
+    {
+      "id": "wood_pillar",
+      "category": "building",
+      "file": "/models/nightfall/building/wood_pillar.glb",
+      "triangles": 12,
+      "materials": 1,
+      "bounds": {
+        "min": [
+          -0.12,
+          0.0,
+          -0.12
+        ],
+        "max": [
+          0.12,
+          2.4,
+          0.12
+        ]
+      },
+      "source": "Blender 4.3.2"
+    },
+    {
+      "id": "stone_wall",
+      "category": "building",
+      "file": "/models/nightfall/building/stone_wall.glb",
+      "triangles": 240,
+      "materials": 1,
+      "bounds": {
+        "min": [
+          -0.99,
+          0.0,
+          -0.19
+        ],
+        "max": [
+          0.99,
+          2.38,
+          0.19
+        ]
+      },
+      "source": "Blender 4.3.2"
+    },
+    {
+      "id": "stone_floor",
+      "category": "building",
+      "file": "/models/nightfall/building/stone_floor.glb",
+      "triangles": 48,
+      "materials": 1,
+      "bounds": {
+        "min": [
+          -0.99,
+          0.0,
+          -0.99
+        ],
+        "max": [
+          0.99,
+          0.2,
+          0.99
+        ]
+      },
+      "source": "Blender 4.3.2"
+    }
+  ]
+}
